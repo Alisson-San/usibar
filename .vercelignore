@@ -1,0 +1,9 @@
+.git
+.tools
+work
+raw
+tests
+.env*
+.next
+node_modules
+data/uploads

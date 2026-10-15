@@ -1,0 +1,155 @@
+{
+  "company": {
+    "name": "Usibar Usinagens Especiais",
+    "Tagline": "Tecnologia em Hidráulica",
+    "headline": "Cilindros, blocos hidráulicos e usinagem CNC sob medida.",
+    "subheadline": "Fabricação de cilindros, blocos hidráulicos e componentes usinados sob medida.",
+    "experienceYears": "20+",
+    "city": "Barão/RS",
+    "phoneDisplay": "51 3696 9839",
+    "whatsapp": "555136969839",
+    "email": "vendas@usibar.com.br",
+    "instagram": "usibar_usinagens",
+    "aboutParagraph1": "A Usibar fabrica cilindros, blocos hidráulicos e componentes usinados em Barão, no Rio Grande do Sul. São mais de 20 anos de experiência no setor.",
+    "aboutParagraph2": "Atendemos aplicações industriais, agrícolas, rodoviárias e de movimentação de cargas, incluindo elevadores hidráulicos.",
+    "aboutParagraph3": "Os componentes são desenvolvidos conforme as especificações de cada projeto.",
+    "logoDarkUrl": "/assets/logo-usibar-dark.webp",
+    "benchImageUrl": "/assets/hero-bench.webp"
+  },
+  "pillars": [
+    {
+      "id": "qualidade",
+      "title": "Qualidade",
+      "desc": "Compromisso com padrões rigorosos e melhoria contínua em cada peça usinada."
+    },
+    {
+      "id": "parceria",
+      "title": "Parceria",
+      "desc": "Relacionamentos sólidos e duradouros com clientes, fornecedores e colaboradores."
+    },
+    {
+      "id": "inovacao",
+      "title": "Inovação",
+      "desc": "Desenvolvimento constante de soluções inteligentes, compactas e eficientes."
+    },
+    {
+      "id": "foco",
+      "title": "Foco no Cliente",
+      "desc": "Entendemos necessidades específicas e entregamos valor em cada projeto sob medida."
+    }
+  ],
+  "sectors": [
+    {
+      "id": "agricola",
+      "name": "Agrícola",
+      "code": "SEC-01"
+    },
+    {
+      "id": "industrial",
+      "name": "Industrial",
+      "code": "SEC-02"
+    },
+    {
+      "id": "transporte",
+      "name": "Transporte & Rodoviário",
+      "code": "SEC-03"
+    },
+    {
+      "id": "construcao",
+      "name": "Construção & Cargas",
+      "code": "SEC-04"
+    },
+    {
+      "id": "elevadores",
+      "name": "Elevadores Hidráulicos",
+      "code": "SEC-05"
+    },
+    {
+      "id": "especiais",
+      "name": "Equipamentos Especiais",
+      "code": "SEC-06"
+    }
+  ],
+  "products": [
+    {
+      "id": "cil-1",
+      "code": "USB-CH-01",
+      "title": "Cilindro Hidráulico c/ Válvula e Tubulação Integrada",
+      "category": "cilindros",
+      "featured": true,
+      "specs": "Dupla Ação • Válvula de Retenção/Contrabalanço • Alta Pressão",
+      "description": "Cilindro com válvula e tubulação integrada para aplicações que exigem controle de fluxo e retenção de carga.",
+      "imageUrl": "/assets/cilindro-valvula.webp"
+    },
+    {
+      "id": "bloco-1",
+      "code": "USB-BH-01",
+      "title": "Bloco Hidráulico Manifold Multi-Estágios Longo",
+      "category": "blocos",
+      "featured": true,
+      "specs": "Usinagem CNC • Rosca de Alta Precisão • Circuito Integrado",
+      "description": "Bloco manifold para integrar componentes e conexões de um circuito hidráulico. Geometria e usinagem conforme projeto.",
+      "imageUrl": "/assets/bloco-manifold-longo.webp"
+    },
+    {
+      "id": "cil-2",
+      "code": "USB-CH-02",
+      "title": "Cilindro Hidráulico Robusto c/ Olhal Usinado",
+      "category": "cilindros",
+      "featured": true,
+      "specs": "Cabeçote Tirante • Olhal Articulado de Alta Carga • Sob Medida",
+      "description": "Cilindro com olhal usinado para fixação articulada em equipamentos industriais, agrícolas e de movimentação de cargas.",
+      "imageUrl": "/assets/cilindro-olhal.webp"
+    },
+    {
+      "id": "bloco-2",
+      "code": "USB-BH-02",
+      "title": "Bloco Hidráulico de Comando de Alta Vazão",
+      "category": "blocos",
+      "featured": true,
+      "specs": "Alumínio/Aço Especial • Cavidades Cartucho • Controle Rigoroso",
+      "description": "Bloco de comando com cavidades para válvulas cartucho. Material, conexões e dimensões definidos conforme o circuito.",
+      "imageUrl": "/assets/bloco-robusto.webp"
+    },
+    {
+      "id": "cil-3",
+      "code": "USB-CH-03",
+      "title": "Cilindro Hidráulico Tirante Cabeçote Quadrado",
+      "category": "cilindros",
+      "featured": false,
+      "specs": "Simples ou Dupla Ação • Fixação Flange/Tirante • Norma Industrial",
+      "description": "Cilindro com cabeçotes quadrados e tirantes. Configuração de simples ou dupla ação e fixação conforme a aplicação.",
+      "imageUrl": "/assets/cilindro-tirante.webp"
+    },
+    {
+      "id": "bloco-3",
+      "code": "USB-BH-03",
+      "title": "Bloco Manifold Distribuidor Multifuros",
+      "category": "blocos",
+      "featured": false,
+      "specs": "Usinagem 5 Faces • Furação Profunda • Teste Hidrostático",
+      "description": "Bloco distribuidor com furações e conexões usinadas para integração ao sistema hidráulico.",
+      "imageUrl": "/assets/bloco-manifold-medio.webp"
+    },
+    {
+      "id": "cil-4",
+      "code": "USB-CH-04",
+      "title": "Cilindro Hidráulico de Curso Longo (Elevação)",
+      "category": "cilindros",
+      "featured": false,
+      "specs": "Especial para Elevadores Hidráulicos e Plataformas • Haste Cromada",
+      "description": "Cilindro de curso longo para elevadores hidráulicos, plataformas e aplicações de movimentação vertical.",
+      "imageUrl": "/assets/cilindro-longo.webp"
+    },
+    {
+      "id": "bloco-4",
+      "code": "USB-BH-04",
+      "title": "Bloco Hidráulico Compacto Auxiliar",
+      "category": "blocos",
+      "featured": false,
+      "specs": "Geometria Compacta • Alta Eficiência • Projeto Customizado",
+      "description": "Bloco compacto para integração em unidades hidráulicas móveis ou estacionárias. Configuração conforme projeto.",
+      "imageUrl": "/assets/bloco-compacto.webp"
+    }
+  ]
+}
