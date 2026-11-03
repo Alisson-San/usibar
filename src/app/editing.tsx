@@ -13,7 +13,8 @@ export type Part = {
 };
 export type Company = Record<string, string>;
 export type SaveState =
-  | { kind: "idle" | "saving" | "saved" }
+  | { kind: "idle" | "saving" }
+  | { kind: "saved"; message?: string }
   | { kind: "error"; message: string; expired?: boolean };
 
 export const blankPart: Part = {
@@ -346,7 +347,6 @@ export function ProductEditor({
                 className="danger-link"
                 disabled={busy}
                 onClick={async () => {
-                  if (!confirm(`Excluir “${part.title}” do catálogo?`)) return;
                   setBusy(true);
                   const ok = await onDelete(part);
                   setBusy(false);
@@ -464,10 +464,20 @@ export function CompanyPanel({
   );
 }
 
+const storageLabel: Record<string, string> = {
+  supabase: "no Supabase",
+  file: "neste computador",
+};
+
 export function EditBar({
   editing,
   setEditing,
   state,
+  storage,
+  canUndo,
+  onUndo,
+  hint,
+  onHintClose,
   onCompany,
   onAdd,
   onLogout,
@@ -475,38 +485,52 @@ export function EditBar({
   editing: boolean;
   setEditing: (v: boolean) => void;
   state: SaveState;
+  storage: string;
+  canUndo: boolean;
+  onUndo: () => void;
+  hint: boolean;
+  onHintClose: () => void;
   onCompany: () => void;
   onAdd: () => void;
   onLogout: () => void;
 }) {
+  const where = storageLabel[storage] ?? `em ${storage}`;
   const status =
     state.kind === "saving"
       ? "Salvando…"
       : state.kind === "saved"
-        ? "Alterações publicadas"
+        ? `${state.message ?? "Alteração publicada"} · salvo ${where}`
         : state.kind === "error"
           ? state.message
           : editing
-            ? "Clique nos textos destacados para editar"
+            ? `Cada alteração é publicada na hora, ${where}`
             : "Visualizando como visitante";
   return (
     <div className={"edit-bar" + (editing ? " on" : "")} role="region" aria-label="Edição do site">
-      <button
-        className="edit-switch"
-        aria-pressed={editing}
-        onClick={() => setEditing(!editing)}
-      >
+      {editing && hint && (
+        <div className="edit-hint" role="note">
+          <strong>Como editar</strong>
+          <ul>
+            <li>Textos com contorno tracejado: clique e digite. Enter confirma, Esc cancela.</li>
+            <li>Peças: clique no cartão para editar; “+ Nova peça” para cadastrar.</li>
+            <li>Errou? Use “Desfazer” ou Ctrl+Z — vale também para exclusões.</li>
+          </ul>
+          <button onClick={onHintClose}>Entendi</button>
+        </div>
+      )}
+      <button className="edit-switch" aria-pressed={editing} onClick={() => setEditing(!editing)}>
         <i />
         {editing ? "Editando" : "Editar site"}
       </button>
       <span className={"edit-status " + state.kind} role="status" aria-live="polite">
         {status}
-        {state.kind === "error" && state.expired && (
-          <a href="/admin">Entrar novamente ↗</a>
-        )}
+        {state.kind === "error" && state.expired && <a href="/admin">Entrar novamente ↗</a>}
       </span>
       {editing && (
         <>
+          <button onClick={onUndo} disabled={!canUndo} title="Desfazer (Ctrl+Z)">
+            ↶ Desfazer
+          </button>
           <button onClick={onAdd}>+ Nova peça</button>
           <button onClick={onCompany}>Empresa e contatos</button>
         </>

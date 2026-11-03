@@ -70,6 +70,23 @@
       "code": "SEC-06"
     }
   ],
+  "process": [
+    {
+      "label": "O desenho",
+      "title": "Projeto conforme a aplicação.",
+      "copy": "Geometria, fixações e conexões definidas conforme as especificações do equipamento e do circuito hidráulico."
+    },
+    {
+      "label": "A usinagem",
+      "title": "Usinagem de blocos hidráulicos.",
+      "copy": "Usinagem de cavidades, furos e conexões para integrar os componentes do circuito hidráulico em um bloco."
+    },
+    {
+      "label": "O movimento",
+      "title": "Cilindros de simples e dupla ação.",
+      "copy": "Cilindros fabricados conforme a aplicação, com curso, dimensões e fixações definidos em projeto."
+    }
+  ],
   "products": [
     {
       "id": "cil-1",

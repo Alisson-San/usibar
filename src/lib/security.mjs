@@ -22,10 +22,23 @@ export function validSession(token, secret, now = Date.now()) {
 }
 const text = (v, max = 4000) =>
   typeof v === "string" && v.trim().length > 0 && v.length <= max;
-const image = (v) =>
-  typeof v === "string" &&
-  /^\/(assets|uploads)\/[a-zA-Z0-9_-]+\.(webp|png|jpg|jpeg)$/.test(v);
-export function validData(data) {
+const escape = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Local assets and uploads, plus photos in the configured Supabase bucket.
+const imageCheck = (remoteBase) => {
+  const remote = remoteBase
+    ? new RegExp("^" + escape(remoteBase) + "usibar-[a-f0-9-]{36}\\.webp$")
+    : null;
+  return (v) =>
+    typeof v === "string" &&
+    (/^\/(assets|uploads)\/[a-zA-Z0-9_-]+\.(webp|png|jpg|jpeg)$/.test(v) ||
+      Boolean(remote?.test(v)));
+};
+/**
+ * @param {any} data
+ * @param {{ remoteBase?: string | null }} [options]
+ */
+export function validData(data, { remoteBase = null } = {}) {
+  const image = imageCheck(remoteBase);
   if (
     !data ||
     typeof data !== "object" ||
@@ -59,20 +72,41 @@ export function validData(data) {
     !image(c.benchImageUrl)
   )
     return false;
-  const ids = new Set();
-  return data.products.every((p) => {
-    if (
-      !p ||
-      !["id", "code", "title", "specs", "description"].every((k) =>
-        text(p[k]),
-      ) ||
-      !["cilindros", "blocos"].includes(p.category) ||
-      typeof p.featured !== "boolean" ||
-      !image(p.imageUrl) ||
-      ids.has(p.id)
+  // Optional sections: validated only when sent.
+  if (
+    "sectors" in data &&
+    !(
+      Array.isArray(data.sectors) &&
+      data.sectors.length <= 20 &&
+      unique(data.sectors) &&
+      data.sectors.every((s) => s && text(s.id, 80) && text(s.name, 120) && text(s.code, 40))
     )
-      return false;
-    ids.add(p.id);
-    return true;
-  });
+  )
+    return false;
+  if (
+    "process" in data &&
+    !(
+      Array.isArray(data.process) &&
+      data.process.length === 3 &&
+      data.process.every(
+        (s) => s && text(s.label, 60) && text(s.title, 120) && text(s.copy, 400),
+      )
+    )
+  )
+    return false;
+  return (
+    unique(data.products) &&
+    data.products.every(
+      (p) =>
+        p &&
+        ["id", "code", "title", "specs", "description"].every((k) => text(p[k])) &&
+        ["cilindros", "blocos"].includes(p.category) &&
+        typeof p.featured === "boolean" &&
+        image(p.imageUrl),
+    )
+  );
+}
+function unique(list) {
+  const ids = new Set(list.map((x) => x?.id));
+  return ids.size === list.length;
 }

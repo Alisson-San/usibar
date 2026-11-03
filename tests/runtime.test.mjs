@@ -8,3 +8,8 @@ test("explicit demo can be rehearsed locally", () =>
   assert.equal(isDemo({ DEMO_MODE: "true" }), true));
 test("cannot enable local storage on Vercel through a false demo flag", () =>
   assert.equal(isDemo({ VERCEL: "1", DEMO_MODE: "false" }), true));
+test("Supabase storage makes Vercel editable", () =>
+  assert.equal(
+    isDemo({ VERCEL: "1", SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "k" }),
+    false,
+  ));
