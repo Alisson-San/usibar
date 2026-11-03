@@ -14,8 +14,35 @@
     "aboutParagraph2": "Atendemos aplicações industriais, agrícolas, rodoviárias e de movimentação de cargas, incluindo elevadores hidráulicos.",
     "aboutParagraph3": "Os componentes são desenvolvidos conforme as especificações de cada projeto.",
     "logoDarkUrl": "/assets/logo-usibar-dark.webp",
-    "benchImageUrl": "/assets/hero-bench.webp"
+    "benchImageUrl": "/assets/hero-bench.webp",
+    "motto": "Tecnologia, força e desempenho em cada movimento."
   },
+  "services": [
+    {
+      "id": "cilindros",
+      "category": "cilindros",
+      "title": "Cilindros hidráulicos",
+      "lead": "Soluções personalizadas para cada aplicação.",
+      "copy": "Produzimos cilindros hidráulicos de simples e dupla ação, desenvolvidos conforme projeto, assegurando desempenho, confiabilidade e excelente relação entre custo e benefício.",
+      "imageUrl": "/assets/cilindro-tirante.webp"
+    },
+    {
+      "id": "blocos",
+      "category": "blocos",
+      "title": "Blocos hidráulicos",
+      "lead": "Precisão e eficiência para o controle do seu sistema.",
+      "copy": "Desenvolvemos e fabricamos blocos hidráulicos conforme as especificações de cada projeto, integrando componentes e circuitos em soluções compactas, seguras e eficientes.",
+      "imageUrl": "/assets/bloco-manifold-medio.webp"
+    },
+    {
+      "id": "usinagem",
+      "category": "all",
+      "title": "Usinagem de precisão",
+      "lead": "Alta precisão e rigoroso controle de qualidade.",
+      "copy": "Usinagem CNC de componentes sob medida, com controle de qualidade que garante confiabilidade, desempenho e durabilidade para as mais diversas aplicações.",
+      "imageUrl": "/assets/bloco-robusto.webp"
+    }
+  ],
   "pillars": [
     {
       "id": "qualidade",
@@ -68,6 +95,23 @@
       "id": "especiais",
       "name": "Equipamentos Especiais",
       "code": "SEC-06"
+    }
+  ],
+  "process": [
+    {
+      "label": "O desenho",
+      "title": "Projeto conforme a aplicação.",
+      "copy": "Geometria, fixações e conexões definidas conforme as especificações do equipamento e do circuito hidráulico."
+    },
+    {
+      "label": "A usinagem",
+      "title": "Usinagem de blocos hidráulicos.",
+      "copy": "Usinagem de cavidades, furos e conexões para integrar os componentes do circuito hidráulico em um bloco."
+    },
+    {
+      "label": "O movimento",
+      "title": "Cilindros de simples e dupla ação.",
+      "copy": "Cilindros fabricados conforme a aplicação, com curso, dimensões e fixações definidos em projeto."
     }
   ],
   "products": [

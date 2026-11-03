@@ -1,22 +1,13 @@
-import { isDemo } from "@/lib/runtime.mjs";
 import { NextResponse } from "next/server";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { authorized, sameOrigin } from "@/lib/auth";
 import { removeBackground } from "@/lib/cutout.mjs";
+import { readOnlyError, store } from "@/lib/content";
 export const runtime = "nodejs";
 export async function POST(req: Request) {
-  if (isDemo())
-    return NextResponse.json(
-      {
-        error:
-          "A demonstração permite apenas consulta. A edição fica disponível na instalação local.",
-      },
-      { status: 403 },
-    );
-
+  const s = store();
+  if (s.readonly)
+    return NextResponse.json({ error: readOnlyError }, { status: 403 });
   if (!sameOrigin(req))
     return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
   if (!(await authorized()))
@@ -58,11 +49,15 @@ export async function POST(req: Request) {
         raw: { width: info.width, height: info.height, channels: 4 },
       });
     }
-    const name = "usibar-" + randomUUID() + ".webp";
-    const dir = path.join(process.cwd(), "data/uploads");
-    await fs.mkdir(dir, { recursive: true });
-    await pipeline.webp({ quality: 90 }).toFile(path.join(dir, name));
-    return NextResponse.json({ url: "/uploads/" + name });
+    const webp = await pipeline.webp({ quality: 90 }).toBuffer();
+    try {
+      return NextResponse.json({ url: await s.saveImage(webp) });
+    } catch {
+      return NextResponse.json(
+        { error: "Não foi possível guardar a imagem." },
+        { status: 502 },
+      );
+    }
   } catch {
     return NextResponse.json(
       { error: "Imagem inválida ou grande demais para processar." },

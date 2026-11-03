@@ -1,4 +1,5 @@
 import { isDemo } from "@/lib/runtime.mjs";
+import { store } from "@/lib/content";
 import { NextResponse } from "next/server";
 import { authorized, sameOrigin } from "@/lib/auth";
 import { createSession, equal } from "@/lib/security.mjs";
@@ -10,6 +11,7 @@ export async function GET() {
     {
       authenticated: isDemo() ? false : await authorized(),
       demoMode: isDemo(),
+      storage: store().kind,
     },
     { headers: { "Cache-Control": "no-store" } },
   );
@@ -19,7 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "A demonstração permite apenas consulta. A edição fica disponível na instalação local.",
+          "A demonstração permite apenas consulta. A edição fica disponível na instalação local ou com o Supabase configurado.",
       },
       { status: 403 },
     );

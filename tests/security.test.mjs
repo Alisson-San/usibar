@@ -57,3 +57,34 @@ test("expired session rejected", () =>
   ));
 test("malformed session rejected", () =>
   assert.equal(validSession("abc", "secret"), false));
+const remoteBase = "https://demo.supabase.co/storage/v1/object/public/catalog/";
+const remote = remoteBase + "usibar-00000000-0000-0000-0000-000000000000.webp";
+test("accept photos from the configured bucket", () =>
+  assert.equal(
+    validData({ ...publicData, products: [{ ...sample.products[0], imageUrl: remote }] }, { remoteBase }),
+    true,
+  ));
+test("reject remote photos without a configured bucket", () =>
+  assert.equal(
+    validData({ ...publicData, products: [{ ...sample.products[0], imageUrl: remote }] }),
+    false,
+  ));
+test("reject photos from another host", () =>
+  assert.equal(
+    validData(
+      { ...publicData, products: [{ ...sample.products[0], imageUrl: remote.replace("demo", "evil") }] },
+      { remoteBase },
+    ),
+    false,
+  ));
+test("accept editable process and sectors", () =>
+  assert.equal(validData({ ...publicData, sectors: sample.sectors, process: sample.process }), true));
+test("reject incomplete process", () =>
+  assert.equal(validData({ ...publicData, process: sample.process.slice(0, 2) }), false));
+test("accept editable services and pillars", () =>
+  assert.equal(validData({ ...publicData, services: sample.services, pillars: sample.pillars }), true));
+test("reject service with unknown category", () =>
+  assert.equal(
+    validData({ ...publicData, services: [{ ...sample.services[0], category: "x" }] }),
+    false,
+  ));
