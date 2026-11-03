@@ -12,13 +12,24 @@ import {
   ProductEditor,
   readError,
   useModal,
-  type Company,
   type Part,
   type SaveState,
 } from "./editing";
+import {
+  Arrow,
+  emptyQuote,
+  HeroArt,
+  Pillars,
+  ProofBar,
+  QuoteBuilder,
+  SectorIcon,
+  SiteFooter,
+  Solutions,
+  type Content,
+  type Ed,
+  type Quote,
+} from "./sections";
 
-type Sector = { id: string; name: string; code: string };
-type Content = { company: Company; products: Part[]; sectors: Sector[]; process: Step[] };
 type Undo = { label: string; before: Content };
 
 const defaultProcess: Step[] = [
@@ -38,9 +49,14 @@ const defaultProcess: Step[] = [
     copy: "Cilindros fabricados conforme a aplicação, com curso, dimensões e fixações definidos em projeto.",
   },
 ];
+const nav = [
+  ["#solucoes", "Soluções"],
+  ["#processo", "Processo"],
+  ["#pecas", "Catálogo"],
+  ["#origem", "Empresa"],
+];
 const typing = (el: EventTarget | null) =>
-  el instanceof HTMLElement &&
-  (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
+  el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 const safeStorage = {
   get: (k: string) => {
     try {
@@ -56,10 +72,6 @@ const safeStorage = {
   },
 };
 
-function Arrow() {
-  return <span aria-hidden="true">↗</span>;
-}
-
 export default function UsibarHome() {
   const [content, setContent] = useState<Content | null>(null),
     [failed, setFailed] = useState(false),
@@ -67,6 +79,9 @@ export default function UsibarHome() {
     [activeId, setActiveId] = useState<string | null>(null),
     [menu, setMenu] = useState(false),
     [zoom, setZoom] = useState(false),
+    [section, setSection] = useState(""),
+    [headerHidden, setHeaderHidden] = useState(false),
+    [quote, setQuote] = useState<Quote>(emptyQuote),
     [logged, setLogged] = useState(false),
     [storage, setStorage] = useState("file"),
     [editing, setEditing] = useState(false),
@@ -98,6 +113,8 @@ export default function UsibarHome() {
           products: d.products,
           sectors: d.sectors ?? [],
           process: d.process?.length === 3 ? d.process : defaultProcess,
+          services: d.services ?? [],
+          pillars: d.pillars ?? [],
         };
         contentRef.current = savedRef.current = c;
         setContent(c);
@@ -121,50 +138,47 @@ export default function UsibarHome() {
 
   // Each confirmed change is published at once, in order. A failure restores the
   // last version the server accepted; a success can be undone from the edit bar.
-  const commit = useCallback(
-    (label: string, change: (c: Content) => Content, recordUndo = true) => {
-      const before = contentRef.current!;
-      const next = change(before);
-      contentRef.current = next;
-      setContent(next);
-      setSave({ kind: "saving" });
-      const run = async () => {
-        try {
-          const res = await fetch("/api/company", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(next),
+  const commit = useCallback((label: string, change: (c: Content) => Content, recordUndo = true) => {
+    const before = contentRef.current!;
+    const next = change(before);
+    contentRef.current = next;
+    setContent(next);
+    setSave({ kind: "saving" });
+    const run = async () => {
+      try {
+        const res = await fetch("/api/company", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(next),
+        });
+        if (!res.ok)
+          throw Object.assign(Error((await readError(res)) || "Não foi possível salvar."), {
+            expired: res.status === 401,
           });
-          if (!res.ok)
-            throw Object.assign(Error((await readError(res)) || "Não foi possível salvar."), {
-              expired: res.status === 401,
-            });
-          savedRef.current = next;
-          if (recordUndo) setUndo((u) => [...u.slice(-19), { label, before }]);
-          setSave({ kind: "saved", message: label });
-          return true;
-        } catch (e) {
-          if (contentRef.current === next) {
-            contentRef.current = savedRef.current;
-            setContent(savedRef.current);
-          }
-          setSave({
-            kind: "error",
-            message:
-              e instanceof TypeError
-                ? "Sem conexão com o servidor. Alteração desfeita."
-                : `${(e as Error).message} Alteração desfeita.`,
-            expired: (e as { expired?: boolean }).expired,
-          });
-          return false;
+        savedRef.current = next;
+        if (recordUndo) setUndo((u) => [...u.slice(-19), { label, before }]);
+        setSave({ kind: "saved", message: label });
+        return true;
+      } catch (e) {
+        if (contentRef.current === next) {
+          contentRef.current = savedRef.current;
+          setContent(savedRef.current);
         }
-      };
-      const p = queue.current.then(run);
-      queue.current = p;
-      return p;
-    },
-    [],
-  );
+        setSave({
+          kind: "error",
+          message:
+            e instanceof TypeError
+              ? "Sem conexão com o servidor. Alteração desfeita."
+              : `${(e as Error).message} Alteração desfeita.`,
+          expired: (e as { expired?: boolean }).expired,
+        });
+        return false;
+      }
+    };
+    const p = queue.current.then(run);
+    queue.current = p;
+    return p;
+  }, []);
   const undoLast = useCallback(() => {
     setUndo((u) => {
       const last = u[u.length - 1];
@@ -203,6 +217,32 @@ export default function UsibarHome() {
     };
   }, [logged, editing, undoLast, save.kind]);
 
+  // Header: shows the section in view, and steps aside while reading downwards.
+  useEffect(() => {
+    if (!loaded) return;
+    const ids = ["solucoes", "processo", "pecas", "origem", "orcamento"];
+    const seen = new IntersectionObserver(
+      (entries) => entries.forEach((e) => e.isIntersecting && setSection(e.target.id)),
+      { rootMargin: "-45% 0px -50% 0px" },
+    );
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) seen.observe(el);
+    });
+    let last = scrollY;
+    const onScroll = () => {
+      const y = scrollY;
+      setHeaderHidden(y > 240 && y > last + 4);
+      if (y < last - 4 || y < 240) setHeaderHidden(false);
+      last = y;
+    };
+    addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      seen.disconnect();
+      removeEventListener("scroll", onScroll);
+    };
+  }, [loaded]);
+
   useEffect(() => {
     if (!loaded) return;
     gsap.registerPlugin(ScrollTrigger);
@@ -211,6 +251,7 @@ export default function UsibarHome() {
     safeStorage.set("usibar-intro", "1", true);
     const ctx = gsap.context(() => {
       mm.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.set(".hc-line", { strokeDasharray: 1, strokeDashoffset: 1 });
         const intro = gsap.timeline();
         if (repeat) gsap.set(".intro-shutter", { display: "none" });
         else {
@@ -231,39 +272,41 @@ export default function UsibarHome() {
             .set(".intro-shutter", { display: "none" });
         }
         intro
-          .from(".site-header", { yPercent: -100, duration: 0.8, ease: "power3.out" }, repeat ? 0 : "-=.5")
-          .from(".hero-title .line-inner", { yPercent: 115, rotate: 4, stagger: 0.09, duration: 1.05, ease: "expo.out" }, "-=.7")
-          .from(".hero-product", { y: 120, rotate: -22, scale: 0.75, opacity: 0, duration: 1.6, ease: "expo.out" }, "-=1.1")
-          .from(".hero-orbit", { scale: 0.6, opacity: 0, duration: 1.4, ease: "expo.out" }, "<")
-          .from(
-            ".hero-topline, .hero-note, .hero-actions, .hero-part-label, .hero-seal, .dimension-line, .hero-bottom",
-            { y: 30, opacity: 0, stagger: 0.07, duration: 0.8, ease: "power3.out" },
-            "-=1.2",
-          );
-        gsap.to(".hero-product", { y: -18, rotate: 2.5, duration: 3.6, yoyo: true, repeat: -1, ease: "sine.inOut", delay: 2.6 });
-        gsap.to(".hero-orbit", { rotate: 360, duration: 80, repeat: -1, ease: "none" });
+          .from(".site-header", { opacity: 0, y: -20, duration: 0.8, ease: "power3.out" }, repeat ? 0 : "-=.5")
+          .from(".hero-title .line-inner", { yPercent: 115, rotate: 3, stagger: 0.09, duration: 1.05, ease: "expo.out" }, "-=.7")
+          .from(".hero-target", { scale: 0.7, opacity: 0, svgOrigin: "262 176", duration: 1.4, ease: "expo.out" }, "-=1")
+          .from(".hero-part", { y: 50, x: 40, opacity: 0, duration: 1.4, ease: "expo.out" }, "<")
+          .from(".hero-eyebrow, .hero-lead, .hero-note, .hero-actions", { y: 24, opacity: 0, stagger: 0.08, duration: 0.8, ease: "power3.out" }, "-=1.1")
+          .to(".hc-line", { strokeDashoffset: 0, stagger: 0.14, duration: 0.7, ease: "power2.inOut" }, "-=.6")
+          .from(".hc-dot", { scale: 0, transformOrigin: "50% 50%", stagger: 0.14, duration: 0.4, ease: "back.out(3)" }, "<")
+          .from(".hc-label", { opacity: 0, x: -8, stagger: 0.14, duration: 0.5 }, "<+.3")
+          .from(".proof-bar li", { y: 30, opacity: 0, stagger: 0.08, duration: 0.8, ease: "power3.out" }, "-=.8");
+        gsap.to(".hero-part", { y: -8, duration: 3.2, yoyo: true, repeat: -1, ease: "sine.inOut", delay: 3 });
+        gsap.to(".hero-target", { rotation: 360, svgOrigin: "262 176", duration: 90, repeat: -1, ease: "none" });
+        gsap.fromTo(
+          ".hc-ring",
+          { scale: 0.6, opacity: 0.9, transformOrigin: "50% 50%" },
+          { scale: 1.8, opacity: 0, duration: 1.8, repeat: -1, stagger: 0.5, ease: "power1.out", delay: 3.4 },
+        );
         gsap.to(".page-course", {
           scaleY: 1,
           ease: "none",
           scrollTrigger: { trigger: document.body, start: "top top", end: "bottom bottom", scrub: 0.5 },
         });
         gsap.utils.toArray<HTMLElement>(".reveal").forEach((el) =>
-          gsap.from(el, { y: 60, opacity: 0, duration: 1.1, ease: "expo.out", scrollTrigger: { trigger: el, start: "top 88%" } }),
+          gsap.from(el, { y: 50, opacity: 0, duration: 1.1, ease: "expo.out", scrollTrigger: { trigger: el, start: "top 88%" } }),
         );
-        gsap.set(".product-card", { y: 60, opacity: 0 });
-        ScrollTrigger.batch(".product-card", {
-          start: "top 92%",
-          once: true,
-          onEnter: (els) => gsap.to(els, { y: 0, opacity: 1, stagger: 0.09, duration: 1, ease: "expo.out", overwrite: true }),
-        });
-        gsap.from(".contact-title > *", {
-          yPercent: 60,
-          opacity: 0,
-          stagger: 0.12,
-          duration: 1.2,
-          ease: "expo.out",
-          scrollTrigger: { trigger: ".contact-title", start: "top 85%" },
-        });
+        for (const sel of [".solution-card", ".product-card", ".sector-tile"]) {
+          gsap.set(sel, { y: 60, opacity: 0 });
+          ScrollTrigger.batch(sel, {
+            start: "top 92%",
+            once: true,
+            onEnter: (els) => gsap.to(els, { y: 0, opacity: 1, stagger: 0.09, duration: 1, ease: "expo.out", overwrite: true }),
+          });
+        }
+        gsap.utils.toArray<HTMLElement>(".solution-figure img").forEach((img) =>
+          gsap.fromTo(img, { yPercent: 6 }, { yPercent: -6, ease: "none", scrollTrigger: { trigger: img, start: "top bottom", end: "bottom top", scrub: true } }),
+        );
         gsap.fromTo(
           ".origin-image > img",
           { scale: 1.18, yPercent: -6 },
@@ -273,24 +316,13 @@ export default function UsibarHome() {
       });
 
       mm.add("(min-width: 1024px) and (prefers-reduced-motion: no-preference) and (pointer: fine)", () => {
-        gsap.to(".hero-product-wrap", {
-          yPercent: 22,
-          rotate: -8,
-          ease: "none",
-          scrollTrigger: { trigger: ".hero", start: "top top", end: "bottom top", scrub: 1 },
-        });
         const hero = root.current!.querySelector<HTMLElement>(".hero")!;
-        const px = gsap.quickTo(".hero-product", "x", { duration: 1.2, ease: "power3" }),
-          ox = gsap.quickTo(".hero-orbit", "x", { duration: 1.6, ease: "power3" }),
-          oy = gsap.quickTo(".hero-orbit", "y", { duration: 1.6, ease: "power3" }),
-          sx = gsap.quickTo(".hero-seal", "x", { duration: 1, ease: "power3" });
+        const px = gsap.quickTo(".hero-part", "x", { duration: 1.2, ease: "power3" }),
+          tx = gsap.quickTo(".hero-target", "x", { duration: 1.6, ease: "power3" });
         const move = (e: PointerEvent) => {
-          const nx = e.clientX / innerWidth - 0.5,
-            ny = e.clientY / innerHeight - 0.5;
-          px(nx * 36);
-          ox(nx * -18);
-          oy(ny * -14);
-          sx(nx * 14);
+          const nx = e.clientX / innerWidth - 0.5;
+          px(nx * 18);
+          tx(nx * -10);
         };
         hero.addEventListener("pointermove", move);
         // A label follows the pointer over the catalog, so a card reads as clickable.
@@ -298,8 +330,7 @@ export default function UsibarHome() {
         const cx = gsap.quickTo(cursor.current, "x", { duration: 0.35, ease: "power3" }),
           cy = gsap.quickTo(cursor.current, "y", { duration: 0.35, ease: "power3" });
         const track = (e: PointerEvent) => {
-          const card = (e.target as HTMLElement).closest(".product-card");
-          cursor.current?.classList.toggle("on", !!card);
+          cursor.current?.classList.toggle("on", !!(e.target as HTMLElement).closest(".product-card"));
           cx(e.clientX);
           cy(e.clientY);
         };
@@ -348,8 +379,7 @@ export default function UsibarHome() {
     .sort((a, b) => Number(b.featured) - Number(a.featured));
   const activeIndex = parts.findIndex((p) => p.id === activeId);
   const active = activeIndex >= 0 ? parts[activeIndex] : null;
-  const step = (d: number) =>
-    parts.length && setActiveId(parts[(activeIndex + d + parts.length) % parts.length].id);
+  const step = (d: number) => parts.length && setActiveId(parts[(activeIndex + d + parts.length) % parts.length].id);
   useEffect(() => setZoom(false), [activeId]);
   useModal(!!active, dialog, () => setActiveId(null), lenisRef.current);
   useEffect(() => {
@@ -362,6 +392,13 @@ export default function UsibarHome() {
     return () => removeEventListener("keydown", key);
   });
 
+  const goTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (lenisRef.current) lenisRef.current.scrollTo(el, { duration: 1.4 });
+    else el.scrollIntoView({ behavior: "smooth" });
+  };
+
   if (!content)
     return (
       <main className="site-loading">
@@ -370,17 +407,12 @@ export default function UsibarHome() {
         {failed && <button onClick={() => location.reload()}>Tentar novamente ↗</button>}
       </main>
     );
-  const { company, products, sectors, process: steps } = content;
+  const { company, products, sectors, process: steps, services, pillars } = content;
   const wa = (text: string) => `https://wa.me/${company.whatsapp}?text=${encodeURIComponent(text)}`;
-  const text = (key: string, label: string, className?: string) => (
-    <Editable
-      value={company[key]}
-      editing={editing}
-      label={label}
-      className={className}
-      onCommit={(v) => commit(`${label} alterado`, (c) => ({ ...c, company: { ...c.company, [key]: v } }))}
-    />
+  const ed: Ed = (value, label, apply) => (
+    <Editable value={value} editing={editing} label={label} onCommit={(v) => commit(`${label} alterado`, (c) => apply(c, v))} />
   );
+  const text = (key: string, label: string) => ed(company[key] ?? "", label, (c, v) => ({ ...c, company: { ...c.company, [key]: v } }));
   return (
     <main className={"usibar-site" + (editing ? " editing" : "")} ref={root}>
       <a className="skip-link" href="#pecas">
@@ -400,32 +432,22 @@ export default function UsibarHome() {
           </span>
         </div>
       </div>
-      <header className="site-header">
+      <header className={"site-header" + (headerHidden && !menu ? " tucked" : "")}>
         <a className="brand" href="#inicio" aria-label="Usibar, início">
           <img src="/assets/logo-usibar-light.webp" alt="Usibar — Tecnologia em hidráulica" />
         </a>
         <nav id="menu" className={menu ? "main-nav open" : "main-nav"} aria-label="Navegação principal">
-          {[
-            ["#processo", "Processo"],
-            ["#pecas", "Produtos"],
-            ["#origem", "Empresa"],
-            ["#contato", "Contato"],
-          ].map(([href, label]) => (
-            <a key={href} href={href} onClick={() => setMenu(false)}>
+          {nav.map(([href, label]) => (
+            <a key={href} href={href} onClick={() => setMenu(false)} aria-current={section === href.slice(1) ? "location" : undefined}>
               {label}
             </a>
           ))}
         </nav>
-        <a className="header-contact" href={wa("Olá! Gostaria de conversar sobre um projeto com a Usibar.")} target="_blank" rel="noreferrer">
-          Solicitar orçamento <Arrow />
+        <a className="header-contact" href="#orcamento" aria-current={section === "orcamento" ? "location" : undefined}>
+          Solicitar orçamento
+          {quote.refs.length > 0 ? <b className="quote-count">{quote.refs.length}</b> : <Arrow />}
         </a>
-        <button
-          className="menu-toggle"
-          aria-label={menu ? "Fechar menu" : "Abrir menu"}
-          aria-expanded={menu}
-          aria-controls="menu"
-          onClick={() => setMenu(!menu)}
-        >
+        <button className="menu-toggle" aria-label={menu ? "Fechar menu" : "Abrir menu"} aria-expanded={menu} aria-controls="menu" onClick={() => setMenu(!menu)}>
           {menu ? "−" : "+"}
         </button>
       </header>
@@ -436,13 +458,13 @@ export default function UsibarHome() {
         </div>
         <span>100</span>
       </aside>
+
       <section className="hero" id="inicio">
-        <div className="hero-topline eyebrow">
-          <span>FABRICAÇÃO SOB MEDIDA · USINAGEM CNC</span>
-          <span>{text("city", "Cidade / UF")} — BRASIL</span>
-        </div>
         <div className="hero-layout">
           <div className="hero-copy">
+            <span className="eyebrow hero-eyebrow">
+              FABRICAÇÃO SOB MEDIDA · {text("city", "Cidade / UF")} — BRASIL
+            </span>
             <h1 className="hero-title">
               <span>
                 <span className="line-inner">CILINDROS</span>
@@ -456,70 +478,43 @@ export default function UsibarHome() {
                 </span>
               </span>
             </h1>
-            <div className="hero-note">
-              <span className="mini-cross" aria-hidden="true">
-                ✳
-              </span>
-              <p>
-                {text("subheadline", "Subtítulo do topo")}
-                <br />
-                Envie o desenho técnico ou as especificações da sua aplicação.
-              </p>
-            </div>
+            <p className="hero-lead">{text("motto", "Lema da empresa")}</p>
+            <p className="hero-note">
+              {text("subheadline", "Subtítulo do topo")} Envie o desenho técnico ou as especificações da sua aplicação.
+            </p>
             <div className="hero-actions">
-              <a href={wa("Olá! Gostaria de solicitar um orçamento à Usibar.")} target="_blank" rel="noreferrer">
+              <a href="#orcamento" className="btn-primary">
                 Solicitar orçamento <Arrow />
               </a>
-              <a href="#pecas">
-                Ver catálogo <Arrow />
+              <a href="#pecas" className="btn-ghost">
+                Ver catálogo <Arrow down />
               </a>
             </div>
           </div>
           <div className="hero-visual">
-            <div className="hero-orbit" aria-hidden="true">
-              <i />
-              <i />
-              <b>+</b>
-              <b>+</b>
-            </div>
-            <div className="hero-product-wrap">
-              <img className="hero-product" src="/assets/cilindro-olhal.webp" alt="Cilindro hidráulico Usibar com olhal de fixação" />
-            </div>
-            <div className="dimension-line horizontal" aria-hidden="true">
-              <span>ENGENHARIA APLICADA</span>
-            </div>
-            <div className="hero-part-label">
-              <span className="eyebrow">COMPONENTE / 01</span>
-              <strong>
-                Cilindro hidráulico
-                <br />
-                com olhal usinado
-              </strong>
-              <span className="tiny-mono">FORÇA LINEAR · FABRICAÇÃO SOB MEDIDA</span>
-            </div>
-            <div className="hero-seal">
-              <strong>{text("experienceYears", "Anos de experiência")}</strong>
-              <span>
-                ANOS DE
-                <br />
-                EXPERIÊNCIA
-              </span>
-            </div>
+            <span className="sheet-tag tiny-mono" aria-hidden="true">
+              FICHA / COMPONENTE 01 · CILINDRO COM OLHAL
+            </span>
+            <HeroArt />
           </div>
         </div>
-        <div className="hero-bottom">
-          <a href="#processo" className="scroll-link">
-            <span className="scroll-disc" aria-hidden="true">
-              ↓
-            </span>
-            ROLE E VEJA UMA PEÇA SAIR DO DESENHO
-          </a>
-          <p>{text("headline", "Mensagem institucional")}</p>
-          <a href="#pecas" className="text-link">
-            Ver catálogo <Arrow />
-          </a>
-        </div>
+        <ProofBar company={company} ed={ed} />
       </section>
+
+      <Solutions
+        services={services}
+        products={products}
+        ed={ed}
+        onBrowse={(cat) => {
+          setFilter(cat);
+          goTo("pecas");
+        }}
+        onQuote={(type) => {
+          setQuote((q) => ({ ...q, type }));
+          goTo("orcamento");
+        }}
+      />
+
       <ProcessSection
         steps={steps}
         editing={editing}
@@ -531,20 +526,19 @@ export default function UsibarHome() {
           }))
         }
       />
+
       <section className="product-section" id="pecas">
         <div className="section-head reveal">
           <div>
-            <span className="eyebrow">02 — CATÁLOGO DE COMPONENTES</span>
+            <span className="eyebrow">03 — CATÁLOGO DE COMPONENTES</span>
             <h2>
-              Cilindros e blocos.
+              Modelos que já produzimos.
               <br />
-              <em>Fabricação sob projeto.</em>
+              <em>Ponto de partida para o seu projeto.</em>
             </h2>
           </div>
           <p>
-            Explore cilindros e blocos hidráulicos.
-            <br />
-            Abra um modelo para ver detalhes e pedir cotação.
+            Abra um modelo para ver detalhes, pedir cotação ou incluí-lo como referência no seu orçamento.
           </p>
         </div>
         <div className="catalog-toolbar">
@@ -566,10 +560,7 @@ export default function UsibarHome() {
         </div>
         <div className="product-grid">
           {editing && (
-            <button
-              className="product-card product-add"
-              onClick={() => setEditorPart({ ...blankPart, category: filter === "blocos" ? "blocos" : "cilindros" })}
-            >
+            <button className="product-card product-add" onClick={() => setEditorPart({ ...blankPart, category: filter === "blocos" ? "blocos" : "cilindros" })}>
               <span className="product-add-plus" aria-hidden="true">
                 +
               </span>
@@ -590,7 +581,7 @@ export default function UsibarHome() {
                   {part.featured ? " / DESTAQUE" : ""}
                 </span>
                 <span>
-                  {String(i + 1).padStart(2, "0")} / <span className="inspect-plus">+</span>
+                  {quote.refs.includes(part.code) ? "NO ORÇAMENTO ✓" : String(i + 1).padStart(2, "0")}
                 </span>
               </div>
               <div className="product-photo">
@@ -602,6 +593,7 @@ export default function UsibarHome() {
                 <div>
                   <span className="eyebrow">{part.category === "cilindros" ? "CILINDRO HIDRÁULICO" : "BLOCO HIDRÁULICO"}</span>
                   <h3>{part.title}</h3>
+                  <span className="product-specs">{part.specs}</span>
                 </div>
                 <span className="round-arrow" aria-hidden="true">
                   {editing ? "✎" : "↗"}
@@ -615,15 +607,16 @@ export default function UsibarHome() {
             ✳
           </span>
           <p>
-            Precisa de outra configuração?
+            Não encontrou a configuração que precisa?
             <br />
             <strong>Fabricamos conforme as especificações do seu projeto.</strong>
           </p>
-          <a href={wa("Olá! Tenho um projeto especial e gostaria de conversar com a Usibar.")} target="_blank" rel="noreferrer">
+          <a href="#orcamento">
             Enviar especificações <Arrow />
           </a>
         </div>
       </section>
+
       <section className="origin" id="origem">
         <div className="origin-image">
           <img src={company.benchImageUrl} alt="Cilindros hidráulicos fabricados pela Usibar sobre a bancada da oficina" />
@@ -632,7 +625,7 @@ export default function UsibarHome() {
           <span className="image-bracket br" />
         </div>
         <div className="origin-copy reveal">
-          <span className="eyebrow">03 — USIBAR USINAGENS ESPECIAIS</span>
+          <span className="eyebrow">04 — A EMPRESA</span>
           <h2>
             Usibar.
             <br />
@@ -654,95 +647,66 @@ export default function UsibarHome() {
             </span>
           </div>
         </div>
+        <Pillars pillars={pillars} ed={ed} />
       </section>
+
       <section className="sectors-section" aria-labelledby="sectors-title">
-        <span className="eyebrow reveal" id="sectors-title">
-          SEGMENTOS ATENDIDOS
-        </span>
-        <div className="sector-list">
+        <div className="section-head reveal">
+          <div>
+            <span className="eyebrow" id="sectors-title">
+              05 — SEGMENTOS ATENDIDOS
+            </span>
+            <h2>
+              Onde nossos componentes
+              <br />
+              <em>trabalham todos os dias.</em>
+            </h2>
+          </div>
+        </div>
+        <ul className="sector-grid">
           {sectors.map((s, i) => (
-            <div className="sector-row reveal" key={s.id}>
+            <li className="sector-tile" key={s.id}>
+              <SectorIcon id={s.id} />
               <span className="tiny-mono">{String(i + 1).padStart(2, "0")}</span>
               <h3>
-                <Editable
-                  value={s.name}
-                  editing={editing}
-                  label={`Segmento ${i + 1}`}
-                  onCommit={(v) =>
-                    commit("Segmento alterado", (c) => ({
-                      ...c,
-                      sectors: c.sectors.map((x) => (x.id === s.id ? { ...x, name: v } : x)),
-                    }))
-                  }
-                />
+                {ed(s.name, `Segmento ${i + 1}`, (c, v) => ({
+                  ...c,
+                  sectors: c.sectors.map((x) => (x.id === s.id ? { ...x, name: v } : x)),
+                }))}
               </h3>
-              {editing ? (
+              {s.id === "elevadores" && <span className="sector-badge">Atuação de destaque</span>}
+              {editing && (
                 <button
                   className="sector-remove"
                   aria-label={`Remover segmento ${s.name}`}
-                  onClick={() =>
-                    commit(`Segmento “${s.name}” removido`, (c) => ({
-                      ...c,
-                      sectors: c.sectors.filter((x) => x.id !== s.id),
-                    }))
-                  }
+                  onClick={() => commit(`Segmento “${s.name}” removido`, (c) => ({ ...c, sectors: c.sectors.filter((x) => x.id !== s.id) }))}
                 >
                   ×
                 </button>
-              ) : (
-                <span className="sector-symbol" aria-hidden="true">
-                  ↗
-                </span>
               )}
-            </div>
+            </li>
           ))}
           {editing && sectors.length < 20 && (
-            <button
-              className="sector-add"
-              onClick={() =>
-                commit("Segmento adicionado", (c) => ({
-                  ...c,
-                  sectors: [
-                    ...c.sectors,
-                    { id: crypto.randomUUID(), name: "Novo segmento", code: `SEC-${String(c.sectors.length + 1).padStart(2, "0")}` },
-                  ],
-                }))
-              }
-            >
-              + Adicionar segmento
-            </button>
+            <li>
+              <button
+                className="sector-add"
+                onClick={() =>
+                  commit("Segmento adicionado", (c) => ({
+                    ...c,
+                    sectors: [...c.sectors, { id: crypto.randomUUID(), name: "Novo segmento", code: `SEC-${String(c.sectors.length + 1).padStart(2, "0")}` }],
+                  }))
+                }
+              >
+                + Adicionar segmento
+              </button>
+            </li>
           )}
-        </div>
+        </ul>
       </section>
-      <section className="contact-section" id="contato">
-        <div className="contact-top eyebrow">
-          <span>CONTATO COMERCIAL</span>
-          <span>{company.city}</span>
-        </div>
-        <a className="contact-title" href={wa("Olá! Gostaria de solicitar um orçamento de componentes hidráulicos.")} target="_blank" rel="noreferrer">
-          <span>
-            SOLICITE<span className="contact-arrow" aria-hidden="true">↗</span>
-          </span>
-          <em>UM ORÇAMENTO.</em>
-        </a>
-        <div className="contact-bottom">
-          <p>
-            Envie seu desenho, sua especificação
-            <br />e informe a aplicação e a quantidade necessária.
-          </p>
-          <a href={wa("Olá, equipe Usibar!")} target="_blank" rel="noreferrer">
-            WhatsApp {company.phoneDisplay} ↗
-          </a>
-          <a href={`mailto:${company.email}`}>{company.email} ↗</a>
-        </div>
-      </section>
-      <footer className="site-footer">
-        <span>
-          © {new Date().getFullYear()} {company.name}
-        </span>
-        <span>CILINDROS · BLOCOS HIDRÁULICOS · USINAGEM CNC</span>
-        {logged ? <button onClick={() => setEditing(true)}>Editar site ↗</button> : <a href="/admin">Área administrativa ↗</a>}
-      </footer>
+
+      <QuoteBuilder company={company} sectors={sectors} services={services} quote={quote} setQuote={setQuote} />
+      <SiteFooter company={company} logged={logged} onEdit={() => setEditing(true)} />
+
       <div className="cursor-label" ref={cursor} aria-hidden="true">
         {editing ? "Editar" : "Ver peça"}
       </div>
@@ -773,9 +737,24 @@ export default function UsibarHome() {
               <span className="eyebrow">{active.specs}</span>
               <h2 id="part-title">{active.title}</h2>
               <p>{active.description}</p>
-              <a href={wa(`Olá! Gostaria de uma cotação para ${active.title} (${active.code}).`)} target="_blank" rel="noreferrer" className="solid-link">
-                Pedir cotação desta peça pelo WhatsApp <Arrow />
-              </a>
+              <div className="part-actions">
+                <a href={wa(`Olá! Gostaria de uma cotação para ${active.title} (${active.code}).`)} target="_blank" rel="noreferrer" className="solid-link">
+                  Pedir cotação pelo WhatsApp <Arrow />
+                </a>
+                <button
+                  className="ghost-link"
+                  aria-pressed={quote.refs.includes(active.code)}
+                  onClick={() =>
+                    setQuote((q) => ({
+                      ...q,
+                      type: q.type || (active.category === "cilindros" ? "Cilindros hidráulicos" : "Blocos hidráulicos"),
+                      refs: q.refs.includes(active.code) ? q.refs.filter((r) => r !== active.code) : [...q.refs, active.code],
+                    }))
+                  }
+                >
+                  {quote.refs.includes(active.code) ? "Incluído no orçamento ✓" : "+ Incluir no orçamento"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

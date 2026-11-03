@@ -4,15 +4,23 @@ Projeto em `/home/alisson/Projetos/usibar` (Ubuntu/WSL). Site local: http://127.
 
 ## Entrega
 
-Visual bege, grafite e laranja; apresentação animada de projeto, usinagem e acionamento; catálogo com oito fotografias reais. A faixa contínua após a abertura foi removida. A logo usa máscara visual para integrar seu fundo à página sem alterar o original. As novas imagens do cilindro com válvula e do manifold longo estão associadas aos produtos. A apresentação institucional recebida permanece em raw.
+Visual bege, grafite e laranja, com textos tirados da apresentação institucional (em raw). A página segue a ordem em que um cliente decide:
 
-As animações são ilustrativas: na seção de processo, uma única cena vetorial acompanha a rolagem em qualquer tela, e os textos fazem parte dela: o texto da etapa 1 é escrito no carimbo do desenho técnico, o da etapa 2 é digitado no painel da CNC enquanto a fresa fura o bloco, e o título da etapa 3 é empurrado pela haste do cilindro pressurizado. “Pular animação” leva direto ao catálogo; com movimento reduzido no sistema, cada etapa aparece pronta. As fotografias preservam as peças, com resolução limitada aos originais.
+1. **Topo** — o cilindro apresentado como ficha técnica, com legendas que se desenham (olhal, cabeçote, tirantes), o lema “Tecnologia, força e desempenho em cada movimento.” e a faixa de fatos (anos de experiência, sede, produção sob projeto, CNC).
+2. **Soluções** — cilindros, blocos e usinagem, cada um com texto oficial e atalhos para ver os modelos ou já orçar.
+3. **Do desenho à peça** — a animação do processo, com os textos dentro dela: o carimbo do desenho técnico, o painel da CNC e o título empurrado pela haste. “Pular animação” leva ao catálogo; com movimento reduzido no sistema, cada etapa aparece pronta.
+4. **Catálogo** — oito fotografias reais; no detalhe de uma peça dá para navegar entre modelos, pedir cotação ou incluí-la como referência no orçamento.
+5. **Empresa e pilares** — qualidade, parceria, inovação e foco no cliente.
+6. **Segmentos** — com ícones técnicos e o destaque em elevadores hidráulicos.
+7. **Orçamento guiado** — o cliente escolhe produto, aplicação, quantidade e se tem desenho; a prévia mostra a mensagem exata, enviada pelo WhatsApp ou por e-mail. Nada é armazenado.
+
+O cabeçalho indica a seção atual e se recolhe durante a leitura. Metadados de compartilhamento e dados estruturados (schema.org) usam os contatos reais. As animações e desenhos são ilustrativos; as fotografias preservam as peças, com resolução limitada aos originais.
 
 ## Edição direto no site
 
 A edição acontece na própria página. Entre em /admin com a senha (ADMIN_PASSWORD); você volta ao início com o modo de edição ativo e uma barra no rodapé da tela. Na primeira vez, um aviso resume como editar.
 
-- textos com contorno tracejado são editados com um clique (Enter confirma, Esc cancela): subtítulo, mensagem institucional, cidade, anos de experiência, parágrafos da empresa, segmentos atendidos e os textos das três etapas do processo — estes direto dentro da animação (carimbo do desenho, painel da CNC e título empurrado pela haste);
+- textos com contorno tracejado são editados com um clique (Enter confirma, Esc cancela): lema, subtítulo, cidade, anos de experiência, títulos e textos das soluções, parágrafos da empresa, pilares, segmentos e os textos das três etapas do processo — estes direto dentro da animação;
 - “+ Nova peça” ou o cartão “Cadastrar nova peça” abre o cadastro com foto (arraste ou clique), código, categoria, especificações, nome, descrição e destaque; clicar em uma peça abre a edição dela, com troca de foto e exclusão;
 - segmentos podem ser adicionados e removidos na própria lista;
 - “Empresa e contatos” reúne nome, slogan, telefone, WhatsApp, e-mail, Instagram e os demais dados.

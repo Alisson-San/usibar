@@ -5,6 +5,7 @@ import {
   JetBrains_Mono,
 } from "next/font/google";
 import "./globals.css";
+import seed from "../../data/db.json";
 
 const space = Space_Grotesk({
   subsets: ["latin"],
@@ -22,10 +23,31 @@ const mono = JetBrains_Mono({
   variable: "--font-mono",
 });
 
+const c = seed.company;
+const description =
+  "Cilindros hidráulicos de simples e dupla ação, blocos hidráulicos (manifolds) e usinagem CNC sob medida. Mais de 20 anos de experiência, em Barão/RS.";
 export const metadata: Metadata = {
-  title: "Usibar Usinagens Especiais | Tecnologia em Hidráulica — Barão/RS",
-  description:
-    "Mais de 20 anos de experiência em Cilindros Hidráulicos, Blocos Hidráulicos (Manifolds) e Usinagem de Precisão em Barão/RS.",
+  title: "Usibar Usinagens Especiais | Cilindros e blocos hidráulicos sob medida — Barão/RS",
+  description,
+  openGraph: {
+    title: "Usibar — Tecnologia em hidráulica",
+    description,
+    type: "website",
+    locale: "pt_BR",
+    images: [{ url: "/assets/hero-bench.webp", alt: "Cilindros hidráulicos fabricados pela Usibar" }],
+  },
+};
+// Structured data from the published catalog, so search engines read the real contacts.
+const organization = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: c.name,
+  slogan: c.motto,
+  description,
+  email: c.email,
+  telephone: "+" + c.whatsapp,
+  address: { "@type": "PostalAddress", addressLocality: "Barão", addressRegion: "RS", addressCountry: "BR" },
+  sameAs: [`https://instagram.com/${c.instagram}`],
 };
 
 export default function RootLayout({
@@ -54,6 +76,10 @@ export default function RootLayout({
             </filter>
           </defs>
         </svg>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
+        />
         {children}
       </body>
     </html>

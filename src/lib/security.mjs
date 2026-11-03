@@ -94,6 +94,36 @@ export function validData(data, { remoteBase = null } = {}) {
     )
   )
     return false;
+  if ("motto" in c && !text(c.motto, 200)) return false;
+  if (
+    "services" in data &&
+    !(
+      Array.isArray(data.services) &&
+      data.services.length <= 6 &&
+      unique(data.services) &&
+      data.services.every(
+        (s) =>
+          s &&
+          text(s.id, 80) &&
+          text(s.title, 120) &&
+          text(s.lead, 200) &&
+          text(s.copy, 600) &&
+          ["cilindros", "blocos", "all"].includes(s.category) &&
+          image(s.imageUrl),
+      )
+    )
+  )
+    return false;
+  if (
+    "pillars" in data &&
+    !(
+      Array.isArray(data.pillars) &&
+      data.pillars.length <= 8 &&
+      unique(data.pillars) &&
+      data.pillars.every((s) => s && text(s.id, 80) && text(s.title, 60) && text(s.desc, 300))
+    )
+  )
+    return false;
   return (
     unique(data.products) &&
     data.products.every(

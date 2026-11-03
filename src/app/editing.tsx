@@ -367,6 +367,7 @@ export function ProductEditor({
 const companyFields: [string, string, string?][] = [
   ["name", "Nome da empresa"],
   ["Tagline", "Slogan"],
+  ["motto", "Lema (topo do site)"],
   ["headline", "Mensagem institucional"],
   ["subheadline", "Subtítulo do topo"],
   ["phoneDisplay", "Telefone visível"],

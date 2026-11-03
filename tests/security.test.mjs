@@ -81,3 +81,10 @@ test("accept editable process and sectors", () =>
   assert.equal(validData({ ...publicData, sectors: sample.sectors, process: sample.process }), true));
 test("reject incomplete process", () =>
   assert.equal(validData({ ...publicData, process: sample.process.slice(0, 2) }), false));
+test("accept editable services and pillars", () =>
+  assert.equal(validData({ ...publicData, services: sample.services, pillars: sample.pillars }), true));
+test("reject service with unknown category", () =>
+  assert.equal(
+    validData({ ...publicData, services: [{ ...sample.services[0], category: "x" }] }),
+    false,
+  ));

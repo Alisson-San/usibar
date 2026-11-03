@@ -143,7 +143,7 @@ export function ProcessSection({
   return (
     <section id="processo" className="manufacturing" ref={section}>
       <div className="process-top eyebrow">
-        <span>01 — PROJETO E FABRICAÇÃO</span>
+        <span>02 — DO DESENHO À PEÇA</span>
         <a href="#pecas" className="skip-scene">
           Pular animação ↓
         </a>

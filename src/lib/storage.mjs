@@ -7,7 +7,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { isDemo } from "./runtime.mjs";
 
-export const CONTENT_KEYS = ["company", "products", "sectors", "process"];
+export const CONTENT_KEYS = ["company", "products", "sectors", "process", "services", "pillars"];
 const ROW_ID = "main";
 
 export function supabaseSettings(env = process.env) {
