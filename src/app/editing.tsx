@@ -365,6 +365,17 @@ export function ProductEditor({
   );
 }
 
+type Social = { id: string; network: string; url: string };
+const NETWORKS: Record<string, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+  linkedin: "LinkedIn",
+  youtube: "YouTube",
+  tiktok: "TikTok",
+  x: "X (Twitter)",
+  site: "Site",
+};
+
 const companyFields: [string, string, string?][] = [
   ["name", "Nome da empresa"],
   ["Tagline", "Slogan"],
@@ -375,7 +386,9 @@ const companyFields: [string, string, string?][] = [
   ["whatsapp", "WhatsApp (somente números, com DDI)", "tel"],
   ["email", "E-mail", "email"],
   ["instagram", "Instagram (usuário)"],
+  ["address", "Endereço (rua, número, bairro)"],
   ["city", "Cidade / UF"],
+  ["zip", "CEP"],
   ["experienceYears", "Anos de experiência"],
 ];
 
@@ -391,10 +404,19 @@ export function CompanyPanel({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [form, setForm] = useState(company),
+  const { socials: initialSocials, ...fields } = company as Company & { socials?: unknown };
+  const [form, setForm] = useState<Company>(fields as Company),
+    [socials, setSocials] = useState<Social[]>(
+      Array.isArray(initialSocials)
+        ? (initialSocials as Social[])
+        : company.instagram
+          ? [{ id: "instagram", network: "instagram", url: `https://instagram.com/${company.instagram}` }]
+          : [],
+    ),
     [busy, setBusy] = useState(false),
     [msg, setMsg] = useState("");
   useModal(true, ref, () => !busy && onClose(), lenis);
+  const setSocial = (i: number, patch: Partial<Social>) => setSocials(socials.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   return (
     <div className="part-overlay" data-lenis-prevent onClick={() => !busy && onClose()}>
       <form
@@ -408,13 +430,16 @@ export function CompanyPanel({
           e.preventDefault();
           if (!/^\d{10,15}$/.test(form.whatsapp))
             return setMsg("WhatsApp: use de 10 a 15 dígitos, ex.: 555136969839.");
+          if (form.zip && !/^\d{5}-?\d{3}$/.test(form.zip.trim())) return setMsg("CEP: use o formato 00000-000.");
+          const links = socials.map((x) => ({ ...x, url: x.url.trim() })).filter((x) => x.url);
+          const bad = links.find((x) => !/^https:\/\/[^\s"'<>]+$/.test(x.url));
+          if (bad) return setMsg(`${NETWORKS[bad.network] ?? "Rede"}: o link deve começar com https://`);
           setBusy(true);
           setMsg("Salvando…");
-          const ok = await onSave(
-            Object.fromEntries(
-              Object.entries(form).map(([k, v]) => [k, v.trim()]),
-            ),
-          );
+          const ok = await onSave({
+            ...Object.fromEntries(Object.entries(form).map(([k, v]) => [k, typeof v === "string" ? v.trim() : v])),
+            socials: links,
+          } as unknown as Company);
           setBusy(false);
           if (ok) onClose();
           else setMsg("Não foi possível salvar. Revise os campos.");
@@ -452,6 +477,39 @@ export function CompanyPanel({
               />
             </label>
           ))}
+          <fieldset className="wide socials-editor">
+            <legend className="tiny-mono">Redes sociais (aparecem com ícone no contato e no rodapé)</legend>
+            {socials.map((x, i) => (
+              <div key={x.id} className="social-row">
+                <select value={x.network} onChange={(e) => setSocial(i, { network: e.target.value })} aria-label="Rede">
+                  {Object.entries(NETWORKS).map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={x.url}
+                  maxLength={300}
+                  placeholder="https://…"
+                  aria-label={`Link do ${NETWORKS[x.network] ?? "perfil"}`}
+                  onChange={(e) => setSocial(i, { url: e.target.value })}
+                />
+                <button type="button" className="danger-link" onClick={() => setSocials(socials.filter((_, j) => j !== i))}>
+                  Remover
+                </button>
+              </div>
+            ))}
+            {socials.length < 10 && (
+              <button
+                type="button"
+                className="ghost-link add-social"
+                onClick={() => setSocials([...socials, { id: crypto.randomUUID(), network: "facebook", url: "" }])}
+              >
+                + Adicionar rede
+              </button>
+            )}
+          </fieldset>
         </div>
         <p role="status" aria-live="polite" className="editor-msg">
           {msg}

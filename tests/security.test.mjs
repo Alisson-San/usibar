@@ -104,3 +104,30 @@ test("accepts photos from the usibar bucket of the central project", () => {
     false,
   );
 });
+test("accept page texts, address and social links", () =>
+  assert.equal(
+    validData({
+      ...publicData,
+      company: { ...sample.company, address: "Rua Martin Biancho, 803", zip: "95730-000" },
+      copy: { "hero.title.1": "CILINDROS" },
+    }),
+    true,
+  ));
+test("reject social link that is not https", () =>
+  assert.equal(
+    validData({
+      ...publicData,
+      company: { ...sample.company, socials: [{ id: "a", network: "instagram", url: "javascript:alert(1)" }] },
+    }),
+    false,
+  ));
+test("reject unknown social network", () =>
+  assert.equal(
+    validData({
+      ...publicData,
+      company: { ...sample.company, socials: [{ id: "a", network: "orkut", url: "https://x.com" }] },
+    }),
+    false,
+  ));
+test("reject malformed text keys", () =>
+  assert.equal(validData({ ...publicData, copy: { "<b>": "x" } }), false));

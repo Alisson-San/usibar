@@ -17,9 +17,13 @@ import {
   type Part,
   type SaveState,
 } from "./editing";
+import { CopyContext, ImageSwap, T } from "./copy";
 import {
   Arrow,
+  ContactCard,
   emptyQuote,
+  Glyph,
+  HERO_IMAGE,
   HeroArt,
   Pillars,
   ProofBar,
@@ -51,12 +55,20 @@ const defaultProcess: Step[] = [
     copy: "Cilindros fabricados conforme a aplicação, com curso, dimensões e fixações definidos em projeto.",
   },
 ];
-const nav = [
-  ["#solucoes", "Soluções"],
-  ["#processo", "Processo"],
-  ["#pecas", "Catálogo"],
-  ["#origem", "Empresa"],
+// Sections as numbered sheets: header, cylinder navigation, index menu and footer share them.
+const navItems = [
+  { id: "solucoes", n: "01", k: "nav.1", d: "Soluções", hint: "Cilindros, blocos e usinagem de precisão" },
+  { id: "processo", n: "02", k: "nav.2", d: "Processo", hint: "Do desenho técnico à peça em movimento" },
+  { id: "pecas", n: "03", k: "nav.3", d: "Catálogo", hint: "Modelos que já produzimos" },
+  { id: "origem", n: "04", k: "nav.4", d: "Empresa", hint: "Quem somos e nossos pilares" },
+  { id: "segmentos", n: "05", k: "nav.5", d: "Segmentos", hint: "Onde nossos componentes trabalham" },
+  { id: "orcamento", n: "06", k: "nav.6", d: "Orçamento", hint: "Seu pedido em quatro respostas" },
 ];
+// Facts that may be missing from content saved before they existed.
+const companyDefaults = {
+  address: "Rua Martin Biancho, 803 — Bairro Bela Vista",
+  zip: "95730-000",
+};
 const typing = (el: EventTarget | null) =>
   el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 const safeStorage = {
@@ -99,6 +111,8 @@ export default function UsibarHome() {
     meter = useRef<HTMLElement>(null),
     counter = useRef<HTMLSpanElement>(null),
     cursor = useRef<HTMLDivElement>(null),
+    cylNav = useRef<HTMLElement>(null),
+    indexRef = useRef<HTMLDivElement>(null),
     lenisRef = useRef<Lenis | null>(null),
     contentRef = useRef<Content | null>(null),
     savedRef = useRef<Content | null>(null),
@@ -113,12 +127,13 @@ export default function UsibarHome() {
       })
       .then((d) => {
         const c: Content = {
-          company: d.company,
+          company: { ...companyDefaults, ...d.company },
           products: d.products,
           sectors: d.sectors ?? [],
           process: d.process?.length === 3 ? d.process : defaultProcess,
           services: d.services ?? [],
           pillars: d.pillars ?? [],
+          copy: d.copy ?? {},
         };
         contentRef.current = savedRef.current = c;
         setContent(c);
@@ -188,6 +203,24 @@ export default function UsibarHome() {
     queue.current = p;
     return p;
   }, []);
+  // Photo upload for the in-place "Trocar foto" controls; errors show in the edit bar.
+  const upload = useCallback(async (file: File) => {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setSave({ kind: "error", message: "Envie uma imagem JPG, PNG ou WebP." });
+      return null;
+    }
+    setSave({ kind: "saving" });
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await authFetch("/api/upload", { method: "POST", body: fd });
+      if (!res.ok) throw Error((await readError(res)) || "Falha no envio da imagem.");
+      return (await res.json()).url as string;
+    } catch (e) {
+      setSave({ kind: "error", message: e instanceof TypeError ? "Sem conexão com o servidor." : (e as Error).message });
+      return null;
+    }
+  }, []);
   const undoLast = useCallback(() => {
     setUndo((u) => {
       const last = u[u.length - 1];
@@ -229,7 +262,7 @@ export default function UsibarHome() {
   // Header: shows the section in view, and steps aside while reading downwards.
   useEffect(() => {
     if (!loaded) return;
-    const ids = ["solucoes", "processo", "pecas", "origem", "orcamento"];
+    const ids = navItems.map((n) => n.id);
     const seen = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && setSection(e.target.id)),
       { rootMargin: "-45% 0px -50% 0px" },
@@ -238,8 +271,23 @@ export default function UsibarHome() {
       const el = document.getElementById(id);
       if (el) seen.observe(el);
     });
-    let last = scrollY;
+    let last = scrollY,
+      frame = 0;
+    // The navigation rod reaches station i when section i is at the reading line.
+    const rod = () => {
+      frame = 0;
+      const line = scrollY + innerHeight * 0.45;
+      const tops = ids.map((id) => document.getElementById(id)?.getBoundingClientRect().top ?? 0).map((t) => t + scrollY);
+      let p = 0;
+      for (let i = 0; i < tops.length; i++) {
+        const next = tops[i + 1] ?? document.body.scrollHeight;
+        if (line >= tops[i]) p = i + Math.min(1, (line - tops[i]) / Math.max(1, next - tops[i]));
+      }
+      cylNav.current?.style.setProperty("--p", String(Math.min(1, p / (ids.length - 1))));
+    };
+    rod();
     const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(rod);
       const y = scrollY;
       setHeaderHidden(y > 240 && y > last + 4);
       if (y < last - 4 || y < 240) setHeaderHidden(false);
@@ -249,6 +297,7 @@ export default function UsibarHome() {
     return () => {
       seen.disconnect();
       removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(frame);
     };
   }, [loaded]);
 
@@ -297,11 +346,6 @@ export default function UsibarHome() {
           { scale: 0.6, opacity: 0.9, transformOrigin: "50% 50%" },
           { scale: 1.8, opacity: 0, duration: 1.8, repeat: -1, stagger: 0.5, ease: "power1.out", delay: 3.4 },
         );
-        gsap.to(".page-course", {
-          scaleY: 1,
-          ease: "none",
-          scrollTrigger: { trigger: document.body, start: "top top", end: "bottom bottom", scrub: 0.5 },
-        });
         gsap.utils.toArray<HTMLElement>(".reveal").forEach((el) =>
           gsap.from(el, { y: 50, opacity: 0, duration: 1.1, ease: "expo.out", scrollTrigger: { trigger: el, start: "top 88%" } }),
         );
@@ -391,6 +435,7 @@ export default function UsibarHome() {
   const step = (d: number) => parts.length && setActiveId(parts[(activeIndex + d + parts.length) % parts.length].id);
   useEffect(() => setZoom(false), [activeId]);
   useModal(!!active, dialog, () => setActiveId(null), lenisRef.current);
+  useModal(menu, indexRef, () => setMenu(false), lenisRef.current);
   useEffect(() => {
     if (!active) return;
     const key = (e: KeyboardEvent) => {
@@ -422,402 +467,490 @@ export default function UsibarHome() {
     <Editable value={value} editing={editing} label={label} onCommit={(v) => commit(`${label} alterado`, (c) => apply(c, v))} />
   );
   const text = (key: string, label: string) => ed(company[key] ?? "", label, (c, v) => ({ ...c, company: { ...c.company, [key]: v } }));
+  const tx = (k: string, d: string) => content.copy[k] ?? d;
+  const copyCtx = {
+    copy: content.copy,
+    editing,
+    setText: (k: string, v: string, label: string) => commit(`${label} alterado`, (c) => ({ ...c, copy: { ...c.copy, [k]: v } })),
+    upload,
+  };
+  const heroImage = company.heroImageUrl || HERO_IMAGE;
+  const footerNav = navItems.map((n) => [`#${n.id}`, tx(n.k, n.d)] as [string, string]);
   return (
-    <main className={"usibar-site" + (editing ? " editing" : "")} ref={root}>
-      <a className="skip-link" href="#pecas">
-        Pular para o catálogo
-      </a>
-      <div className="intro-shutter" aria-hidden="true">
-        <div className="intro-brand">
-          USIBAR<span>✳</span>
-        </div>
-        <div className="intro-meter">
-          <i ref={meter} />
-        </div>
-        <div className="intro-info">
-          <span>USIBAR / TECNOLOGIA EM HIDRÁULICA</span>
-          <span>
-            <span ref={counter}>000</span> / 100
-          </span>
-        </div>
-      </div>
-      <header className={"site-header" + (headerHidden && !menu ? " tucked" : "")}>
-        <a className="brand" href="#inicio" aria-label="Usibar, início">
-          <img src="/assets/logo-usibar-light.webp" alt="Usibar — Tecnologia em hidráulica" />
+    <CopyContext.Provider value={copyCtx}>
+      <main className={"usibar-site" + (editing ? " editing" : "")} ref={root}>
+        <a className="skip-link" href="#pecas">
+          {tx("skip", "Pular para o catálogo")}
         </a>
-        <nav id="menu" className={menu ? "main-nav open" : "main-nav"} aria-label="Navegação principal">
-          {nav.map(([href, label]) => (
-            <a key={href} href={href} onClick={() => setMenu(false)} aria-current={section === href.slice(1) ? "location" : undefined}>
-              {label}
-            </a>
-          ))}
-        </nav>
-        <a className="header-contact" href="#orcamento" aria-current={section === "orcamento" ? "location" : undefined}>
-          Solicitar orçamento
-          {quote.refs.length > 0 ? <b className="quote-count">{quote.refs.length}</b> : <Arrow />}
-        </a>
-        <button className="menu-toggle" aria-label={menu ? "Fechar menu" : "Abrir menu"} aria-expanded={menu} aria-controls="menu" onClick={() => setMenu(!menu)}>
-          {menu ? "−" : "+"}
-        </button>
-      </header>
-      <aside className="course-indicator" aria-hidden="true">
-        <span>CURSO</span>
-        <div>
-          <i className="page-course" />
-        </div>
-        <span>100</span>
-      </aside>
-
-      <section className="hero" id="inicio">
-        <div className="hero-layout">
-          <div className="hero-copy">
-            <span className="eyebrow hero-eyebrow">
-              FABRICAÇÃO SOB MEDIDA · {text("city", "Cidade / UF")} — BRASIL
+        <div className="intro-shutter" aria-hidden="true">
+          <div className="intro-brand">
+            USIBAR<span>✳</span>
+          </div>
+          <div className="intro-meter">
+            <i ref={meter} />
+          </div>
+          <div className="intro-info">
+            <span>USIBAR / TECNOLOGIA EM HIDRÁULICA</span>
+            <span>
+              <span ref={counter}>000</span> / 100
             </span>
-            <h1 className="hero-title">
-              <span>
-                <span className="line-inner">CILINDROS</span>
+          </div>
+        </div>
+
+        <header className={"site-header" + (headerHidden && !menu ? " tucked" : "")}>
+          <a className="brand" href="#inicio" aria-label="Usibar, início">
+            <img src="/assets/logo-usibar-light.webp" alt="Usibar — Tecnologia em hidráulica" />
+          </a>
+          <nav className="main-nav" aria-label="Navegação principal">
+            {navItems.slice(0, 5).map((n) => (
+              <a key={n.id} href={`#${n.id}`} aria-current={section === n.id ? "location" : undefined}>
+                <small>{n.n}</small>
+                <T k={n.k} d={n.d} label={`Menu — ${n.d}`} />
+              </a>
+            ))}
+          </nav>
+          <a className="header-contact" href="#orcamento" aria-current={section === "orcamento" ? "location" : undefined}>
+            <T k="header.cta" d="Solicitar orçamento" label="Cabeçalho — botão" />
+            {quote.refs.length > 0 ? <b className="quote-count">{quote.refs.length}</b> : <Arrow />}
+          </a>
+          <button className="menu-toggle" aria-expanded={menu} aria-controls="index-menu" onClick={() => setMenu(true)}>
+            <i aria-hidden="true" />
+            <span>{tx("header.index", "Índice")}</span>
+          </button>
+        </header>
+
+        {/* Section navigation drawn as a hydraulic cylinder: the rod extends with the reading. */}
+        <nav className="cyl-nav" ref={cylNav} aria-label="Seções da página">
+          <span className="cyl-barrel" aria-hidden="true">
+            <i />
+          </span>
+          <span className="cyl-track">
+            <i className="cyl-rod" aria-hidden="true" />
+            <i className="cyl-eye" aria-hidden="true" />
+            {navItems.map((n, i) => (
+              <button
+                key={n.id}
+                style={{ top: `${(i / (navItems.length - 1)) * 100}%` }}
+                className={section === n.id ? "on" : ""}
+                aria-current={section === n.id ? "location" : undefined}
+                onClick={() => goTo(n.id)}
+              >
+                <b>{n.n}</b>
+                <span>{tx(n.k, n.d)}</span>
+              </button>
+            ))}
+          </span>
+        </nav>
+
+        {menu && (
+          <div className="index-menu" id="index-menu" role="dialog" aria-modal="true" aria-label={tx("header.index", "Índice")} data-lenis-prevent ref={indexRef}>
+            <div className="index-top">
+              <span className="tiny-mono">{tx("index.title", "ÍNDICE DE FOLHAS · USIBAR")}</span>
+              <button onClick={() => setMenu(false)}>{tx("index.close", "Fechar")} ×</button>
+            </div>
+            <ol className="index-list">
+              {navItems.map((n, i) => (
+                <li key={n.id} style={{ "--i": i } as React.CSSProperties}>
+                  <a
+                    href={`#${n.id}`}
+                    aria-current={section === n.id ? "location" : undefined}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setMenu(false);
+                      setTimeout(() => goTo(n.id), 60);
+                    }}
+                  >
+                    <b>{n.n}</b>
+                    <strong>{tx(n.k, n.d)}</strong>
+                    <span>{tx(`${n.k}.hint`, n.hint)}</span>
+                  </a>
+                </li>
+              ))}
+            </ol>
+            <ContactCard company={company} />
+          </div>
+        )}
+
+        <section className="hero" id="inicio">
+          <div className="hero-layout">
+            <div className="hero-copy">
+              <span className="eyebrow hero-eyebrow">
+                <T k="hero.eyebrow" d="FABRICAÇÃO SOB MEDIDA" label="Topo — rótulo" /> · {text("city", "Cidade / UF")} —{" "}
+                <T k="hero.country" d="BRASIL" label="Topo — país" />
               </span>
-              <span>
-                <span className="line-inner">E BLOCOS</span>
-              </span>
-              <span className="accent-line">
-                <span className="line-inner">
-                  HIDRÁULICOS<span className="title-period">.</span>
+              <h1 className="hero-title">
+                <span>
+                  <span className="line-inner">
+                    <T k="hero.title.1" d="CILINDROS" label="Título principal — linha 1" />
+                  </span>
                 </span>
+                <span>
+                  <span className="line-inner">
+                    <T k="hero.title.2" d="E BLOCOS" label="Título principal — linha 2" />
+                  </span>
+                </span>
+                <span className="accent-line">
+                  <span className="line-inner">
+                    <T k="hero.title.3" d="HIDRÁULICOS" label="Título principal — linha 3" />
+                    <span className="title-period">.</span>
+                  </span>
+                </span>
+              </h1>
+              <p className="hero-lead">{text("motto", "Lema da empresa")}</p>
+              <p className="hero-note">
+                {text("subheadline", "Subtítulo do topo")}{" "}
+                <T k="hero.note" d="Envie o desenho técnico ou as especificações da sua aplicação." label="Topo — convite" />
+              </p>
+              <div className="hero-actions">
+                <a href="#orcamento" className="btn-primary">
+                  <T k="hero.cta.1" d="Solicitar orçamento" label="Topo — botão principal" /> <Arrow />
+                </a>
+                <a href="#pecas" className="btn-ghost">
+                  <T k="hero.cta.2" d="Ver catálogo" label="Topo — botão secundário" /> <Arrow down />
+                </a>
+              </div>
+            </div>
+            <div className="hero-visual">
+              <span className="sheet-tag tiny-mono">
+                <T k="hero.sheet" d="FICHA / COMPONENTE 01 · CILINDRO COM OLHAL" label="Topo — etiqueta da foto" />
               </span>
-            </h1>
-            <p className="hero-lead">{text("motto", "Lema da empresa")}</p>
-            <p className="hero-note">
-              {text("subheadline", "Subtítulo do topo")} Envie o desenho técnico ou as especificações da sua aplicação.
-            </p>
-            <div className="hero-actions">
-              <a href="#orcamento" className="btn-primary">
-                Solicitar orçamento <Arrow />
-              </a>
-              <a href="#pecas" className="btn-ghost">
-                Ver catálogo <Arrow down />
-              </a>
+              <HeroArt src={heroImage} />
+              <ImageSwap
+                label="foto do topo"
+                onChange={(url) => commit("Foto do topo trocada", (c) => ({ ...c, company: { ...c.company, heroImageUrl: url } }))}
+              />
             </div>
           </div>
-          <div className="hero-visual">
-            <span className="sheet-tag tiny-mono" aria-hidden="true">
-              FICHA / COMPONENTE 01 · CILINDRO COM OLHAL
+          <ProofBar company={company} ed={ed} />
+        </section>
+
+        <Solutions
+          services={services}
+          products={products}
+          ed={ed}
+          apply={(change, label) => commit(label, change)}
+          onBrowse={(cat) => {
+            setFilter(cat);
+            goTo("pecas");
+          }}
+          onQuote={(type) => {
+            setQuote((q) => ({ ...q, type }));
+            goTo("orcamento");
+          }}
+        />
+
+        <ProcessSection
+          steps={steps}
+          editing={editing}
+          lenis={lenisRef}
+          onEdit={(i, key, v) =>
+            commit(`Texto da etapa ${i + 1} alterado`, (c) => ({
+              ...c,
+              process: c.process.map((s, j) => (j === i ? { ...s, [key]: v } : s)),
+            }))
+          }
+        />
+
+        <section className="product-section" id="pecas">
+          <div className="section-head reveal">
+            <div>
+              <span className="eyebrow">
+                <T k="catalog.eyebrow" d="03 — CATÁLOGO DE COMPONENTES" label="Catálogo — rótulo" />
+              </span>
+              <h2>
+                <T k="catalog.title.1" d="Modelos que já produzimos." label="Catálogo — título" />
+                <br />
+                <em>
+                  <T k="catalog.title.2" d="Ponto de partida para o seu projeto." label="Catálogo — título (destaque)" />
+                </em>
+              </h2>
+            </div>
+            <p>
+              <T k="catalog.intro" d="Abra um modelo para ver detalhes, pedir cotação ou incluí-lo como referência no seu orçamento." label="Catálogo — introdução" />
+            </p>
+          </div>
+          <div className="catalog-toolbar">
+            <div className="catalog-tabs" role="group" aria-label="Filtrar por categoria">
+              {[
+                ["all", "catalog.tab.all", "Todas as peças"],
+                ["cilindros", "catalog.tab.cilindros", "Cilindros"],
+                ["blocos", "catalog.tab.blocos", "Blocos"],
+              ].map(([value, k, d]) => (
+                <button key={value} aria-pressed={filter === value} className={filter === value ? "selected" : ""} onClick={() => setFilter(value)}>
+                  <T k={k} d={d} label="Catálogo — filtro" />
+                  <span>{value === "all" ? products.length : products.filter((p) => p.category === value).length}</span>
+                </button>
+              ))}
+            </div>
+            <span className="tiny-mono" aria-live="polite">
+              {editing ? "CLIQUE EM UMA PEÇA PARA EDITAR ↙" : (
+                <>
+                  {parts.length} <T k="catalog.count" d="MODELOS · PRODUÇÃO CONFORME PROJETO" label="Catálogo — contador" />
+                </>
+              )}
             </span>
-            <HeroArt />
           </div>
-        </div>
-        <ProofBar company={company} ed={ed} />
-      </section>
-
-      <Solutions
-        services={services}
-        products={products}
-        ed={ed}
-        onBrowse={(cat) => {
-          setFilter(cat);
-          goTo("pecas");
-        }}
-        onQuote={(type) => {
-          setQuote((q) => ({ ...q, type }));
-          goTo("orcamento");
-        }}
-      />
-
-      <ProcessSection
-        steps={steps}
-        editing={editing}
-        lenis={lenisRef}
-        onEdit={(i, key, v) =>
-          commit(`Texto da etapa ${i + 1} alterado`, (c) => ({
-            ...c,
-            process: c.process.map((s, j) => (j === i ? { ...s, [key]: v } : s)),
-          }))
-        }
-      />
-
-      <section className="product-section" id="pecas">
-        <div className="section-head reveal">
-          <div>
-            <span className="eyebrow">03 — CATÁLOGO DE COMPONENTES</span>
-            <h2>
-              Modelos que já produzimos.
-              <br />
-              <em>Ponto de partida para o seu projeto.</em>
-            </h2>
-          </div>
-          <p>
-            Abra um modelo para ver detalhes, pedir cotação ou incluí-lo como referência no seu orçamento.
-          </p>
-        </div>
-        <div className="catalog-toolbar">
-          <div className="catalog-tabs" role="group" aria-label="Filtrar por categoria">
-            {[
-              ["all", "Todas as peças"],
-              ["cilindros", "Cilindros"],
-              ["blocos", "Blocos"],
-            ].map(([value, label]) => (
-              <button key={value} aria-pressed={filter === value} className={filter === value ? "selected" : ""} onClick={() => setFilter(value)}>
-                {label}
-                <span>{value === "all" ? products.length : products.filter((p) => p.category === value).length}</span>
+          <div className="product-grid">
+            {editing && (
+              <button className="product-card product-add" onClick={() => setEditorPart({ ...blankPart, category: filter === "blocos" ? "blocos" : "cilindros" })}>
+                <span className="product-add-plus" aria-hidden="true">
+                  +
+                </span>
+                <strong>Cadastrar nova peça</strong>
+                <span className="tiny-mono">FOTO · CÓDIGO · DESCRIÇÃO</span>
+              </button>
+            )}
+            {parts.map((part, i) => (
+              <button
+                className="product-card"
+                key={part.id}
+                onClick={() => (editing ? setEditorPart(part) : setActiveId(part.id))}
+                aria-label={`${editing ? "Editar" : "Ver detalhes de"} ${part.title}`}
+              >
+                <div className="product-top tiny-mono">
+                  <span>
+                    {part.code}
+                    {part.featured ? ` / ${tx("catalog.featured", "DESTAQUE")}` : ""}
+                  </span>
+                  <span>{quote.refs.includes(part.code) ? `${tx("catalog.inquote", "NO ORÇAMENTO")} ✓` : String(i + 1).padStart(2, "0")}</span>
+                </div>
+                <div className="product-photo">
+                  <div className="product-cross one" />
+                  <div className="product-cross two" />
+                  <img loading="lazy" src={part.imageUrl} alt="" />
+                </div>
+                <div className="product-bottom">
+                  <div>
+                    <span className="eyebrow">
+                      {part.category === "cilindros" ? tx("catalog.cat.cilindros", "CILINDRO HIDRÁULICO") : tx("catalog.cat.blocos", "BLOCO HIDRÁULICO")}
+                    </span>
+                    <h3>{part.title}</h3>
+                    <span className="product-specs">{part.specs}</span>
+                  </div>
+                  <span className="round-arrow" aria-hidden="true">
+                    {editing ? "✎" : "↗"}
+                  </span>
+                </div>
               </button>
             ))}
           </div>
-          <span className="tiny-mono" aria-live="polite">
-            {editing ? "CLIQUE EM UMA PEÇA PARA EDITAR ↙" : `${parts.length} MODELOS · PRODUÇÃO CONFORME PROJETO`}
-          </span>
-        </div>
-        <div className="product-grid">
-          {editing && (
-            <button className="product-card product-add" onClick={() => setEditorPart({ ...blankPart, category: filter === "blocos" ? "blocos" : "cilindros" })}>
-              <span className="product-add-plus" aria-hidden="true">
-                +
-              </span>
-              <strong>Cadastrar nova peça</strong>
-              <span className="tiny-mono">FOTO · CÓDIGO · DESCRIÇÃO</span>
-            </button>
-          )}
-          {parts.map((part, i) => (
-            <button
-              className="product-card"
-              key={part.id}
-              onClick={() => (editing ? setEditorPart(part) : setActiveId(part.id))}
-              aria-label={`${editing ? "Editar" : "Ver detalhes de"} ${part.title}`}
-            >
-              <div className="product-top tiny-mono">
-                <span>
-                  {part.code}
-                  {part.featured ? " / DESTAQUE" : ""}
-                </span>
-                <span>
-                  {quote.refs.includes(part.code) ? "NO ORÇAMENTO ✓" : String(i + 1).padStart(2, "0")}
-                </span>
-              </div>
-              <div className="product-photo">
-                <div className="product-cross one" />
-                <div className="product-cross two" />
-                <img loading="lazy" src={part.imageUrl} alt="" />
-              </div>
-              <div className="product-bottom">
-                <div>
-                  <span className="eyebrow">{part.category === "cilindros" ? "CILINDRO HIDRÁULICO" : "BLOCO HIDRÁULICO"}</span>
-                  <h3>{part.title}</h3>
-                  <span className="product-specs">{part.specs}</span>
-                </div>
-                <span className="round-arrow" aria-hidden="true">
-                  {editing ? "✎" : "↗"}
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-        <div className="catalog-close">
-          <span className="mini-cross" aria-hidden="true">
-            ✳
-          </span>
-          <p>
-            Não encontrou a configuração que precisa?
-            <br />
-            <strong>Fabricamos conforme as especificações do seu projeto.</strong>
-          </p>
-          <a href="#orcamento">
-            Enviar especificações <Arrow />
-          </a>
-        </div>
-      </section>
-
-      <section className="origin" id="origem">
-        <div className="origin-image">
-          <img src={company.benchImageUrl} alt="Cilindros hidráulicos fabricados pela Usibar sobre a bancada da oficina" />
-          <span className="image-caption tiny-mono">DENTRO DA USIBAR / {company.city}</span>
-          <span className="image-bracket tl" />
-          <span className="image-bracket br" />
-        </div>
-        <div className="origin-copy reveal">
-          <span className="eyebrow">04 — A EMPRESA</span>
-          <h2>
-            Usibar.
-            <br />
-            <em>
-              Usinagens
-              <br />
-              especiais.
-            </em>
-          </h2>
-          <p>{text("aboutParagraph1", "Apresentação — parágrafo 1")}</p>
-          <p>{text("aboutParagraph2", "Apresentação — parágrafo 2")}</p>
-          <p>{text("aboutParagraph3", "Apresentação — parágrafo 3")}</p>
-          <div className="origin-stat">
-            <strong>{text("experienceYears", "Anos de experiência")}</strong>
-            <span>
-              ANOS DE EXPERIÊNCIA
-              <br />
-              EM TECNOLOGIA HIDRÁULICA
+          <div className="catalog-close">
+            <span className="mini-cross" aria-hidden="true">
+              ✳
             </span>
+            <p>
+              <T k="catalog.close.1" d="Não encontrou a configuração que precisa?" label="Catálogo — fechamento" />
+              <br />
+              <strong>
+                <T k="catalog.close.2" d="Fabricamos conforme as especificações do seu projeto." label="Catálogo — fechamento (destaque)" />
+              </strong>
+            </p>
+            <a href="#orcamento">
+              <T k="catalog.close.cta" d="Enviar especificações" label="Catálogo — botão" /> <Arrow />
+            </a>
           </div>
-        </div>
-        <Pillars pillars={pillars} ed={ed} />
-      </section>
+        </section>
 
-      <section className="sectors-section" aria-labelledby="sectors-title">
-        <div className="section-head reveal">
-          <div>
-            <span className="eyebrow" id="sectors-title">
-              05 — SEGMENTOS ATENDIDOS
+        <section className="origin" id="origem">
+          <div className="origin-image">
+            <img src={company.benchImageUrl} alt="Cilindros hidráulicos fabricados pela Usibar sobre a bancada da oficina" />
+            <span className="image-caption tiny-mono">
+              <T k="origin.caption" d="DENTRO DA USIBAR" label="Empresa — legenda da foto" /> / {company.city}
+            </span>
+            <span className="image-bracket tl" />
+            <span className="image-bracket br" />
+            <ImageSwap label="foto da empresa" onChange={(url) => commit("Foto da empresa trocada", (c) => ({ ...c, company: { ...c.company, benchImageUrl: url } }))} />
+          </div>
+          <div className="origin-copy reveal">
+            <span className="eyebrow">
+              <T k="origin.eyebrow" d="04 — A EMPRESA" label="Empresa — rótulo" />
             </span>
             <h2>
-              Onde nossos componentes
+              <T k="origin.title.1" d="Usibar." label="Empresa — título" />
               <br />
-              <em>trabalham todos os dias.</em>
+              <em>
+                <T k="origin.title.2" d="Usinagens especiais." label="Empresa — título (destaque)" />
+              </em>
             </h2>
-          </div>
-        </div>
-        <ul className="sector-grid">
-          {sectors.map((s, i) => (
-            <li className="sector-tile" key={s.id}>
-              <SectorIcon id={s.id} />
-              <span className="tiny-mono">{String(i + 1).padStart(2, "0")}</span>
-              <h3>
-                {ed(s.name, `Segmento ${i + 1}`, (c, v) => ({
-                  ...c,
-                  sectors: c.sectors.map((x) => (x.id === s.id ? { ...x, name: v } : x)),
-                }))}
-              </h3>
-              {s.id === "elevadores" && <span className="sector-badge">Atuação de destaque</span>}
-              {editing && (
-                <button
-                  className="sector-remove"
-                  aria-label={`Remover segmento ${s.name}`}
-                  onClick={() => commit(`Segmento “${s.name}” removido`, (c) => ({ ...c, sectors: c.sectors.filter((x) => x.id !== s.id) }))}
-                >
-                  ×
-                </button>
-              )}
-            </li>
-          ))}
-          {editing && sectors.length < 20 && (
-            <li>
-              <button
-                className="sector-add"
-                onClick={() =>
-                  commit("Segmento adicionado", (c) => ({
-                    ...c,
-                    sectors: [...c.sectors, { id: crypto.randomUUID(), name: "Novo segmento", code: `SEC-${String(c.sectors.length + 1).padStart(2, "0")}` }],
-                  }))
-                }
-              >
-                + Adicionar segmento
-              </button>
-            </li>
-          )}
-        </ul>
-      </section>
-
-      <QuoteBuilder company={company} sectors={sectors} services={services} quote={quote} setQuote={setQuote} />
-      <SiteFooter company={company} logged={logged} onEdit={() => setEditing(true)} />
-
-      <div className="cursor-label" ref={cursor} aria-hidden="true">
-        {editing ? "Editar" : "Ver peça"}
-      </div>
-      {active && (
-        <div className="part-overlay" data-lenis-prevent onClick={() => setActiveId(null)}>
-          <div className="part-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby="part-title" onClick={(e) => e.stopPropagation()}>
-            <div className="part-dialog-top tiny-mono">
+            <p>{text("aboutParagraph1", "Apresentação — parágrafo 1")}</p>
+            <p>{text("aboutParagraph2", "Apresentação — parágrafo 2")}</p>
+            <p>{text("aboutParagraph3", "Apresentação — parágrafo 3")}</p>
+            <div className="origin-stat">
+              <strong>{text("experienceYears", "Anos de experiência")}</strong>
               <span>
-                {active.code} · {activeIndex + 1} DE {parts.length}
-              </span>
-              <span className="part-nav">
-                <button onClick={() => step(-1)} aria-label="Peça anterior">
-                  ←
-                </button>
-                <button onClick={() => step(1)} aria-label="Próxima peça">
-                  →
-                </button>
-                <button onClick={() => setActiveId(null)} aria-label="Fechar detalhes">
-                  FECHAR ×
-                </button>
+                <T k="origin.stat" d="ANOS DE EXPERIÊNCIA EM TECNOLOGIA HIDRÁULICA" label="Empresa — legenda do número" />
               </span>
             </div>
-            <button className={"part-inspect-image " + (zoom ? "zoomed" : "")} onClick={() => setZoom(!zoom)} aria-label={zoom ? "Reduzir imagem" : "Ampliar imagem"}>
-              <img src={active.imageUrl} alt={active.title} key={active.id} />
-              <span className="tiny-mono">{zoom ? "− REDUZIR" : "+ AMPLIAR DETALHES"}</span>
-            </button>
-            <div className="part-dialog-copy" key={active.id}>
-              <span className="eyebrow">{active.specs}</span>
-              <h2 id="part-title">{active.title}</h2>
-              <p>{active.description}</p>
-              <div className="part-actions">
-                <a href={wa(`Olá! Gostaria de uma cotação para ${active.title} (${active.code}).`)} target="_blank" rel="noreferrer" className="solid-link">
-                  Pedir cotação pelo WhatsApp <Arrow />
-                </a>
+          </div>
+          <Pillars pillars={pillars} ed={ed} />
+        </section>
+
+        <section className="sectors-section" id="segmentos" aria-labelledby="sectors-title">
+          <div className="section-head reveal">
+            <div>
+              <span className="eyebrow" id="sectors-title">
+                <T k="sectors.eyebrow" d="05 — SEGMENTOS ATENDIDOS" label="Segmentos — rótulo" />
+              </span>
+              <h2>
+                <T k="sectors.title.1" d="Onde nossos componentes" label="Segmentos — título" />
+                <br />
+                <em>
+                  <T k="sectors.title.2" d="trabalham todos os dias." label="Segmentos — título (destaque)" />
+                </em>
+              </h2>
+            </div>
+          </div>
+          <ul className="sector-grid">
+            {sectors.map((s, i) => (
+              <li className="sector-tile" key={s.id}>
+                <SectorIcon id={s.id} />
+                <span className="tiny-mono">{String(i + 1).padStart(2, "0")}</span>
+                <h3>
+                  {ed(s.name, `Segmento ${i + 1}`, (c, v) => ({
+                    ...c,
+                    sectors: c.sectors.map((x) => (x.id === s.id ? { ...x, name: v } : x)),
+                  }))}
+                </h3>
+                {s.id === "elevadores" && (
+                  <span className="sector-badge">
+                    <T k="sectors.badge" d="Atuação de destaque" label="Segmentos — selo" />
+                  </span>
+                )}
+                {editing && (
+                  <button
+                    className="sector-remove"
+                    aria-label={`Remover segmento ${s.name}`}
+                    onClick={() => commit(`Segmento “${s.name}” removido`, (c) => ({ ...c, sectors: c.sectors.filter((x) => x.id !== s.id) }))}
+                  >
+                    ×
+                  </button>
+                )}
+              </li>
+            ))}
+            {editing && sectors.length < 20 && (
+              <li>
                 <button
-                  className="ghost-link"
-                  aria-pressed={quote.refs.includes(active.code)}
+                  className="sector-add"
                   onClick={() =>
-                    setQuote((q) => ({
-                      ...q,
-                      type: q.type || (active.category === "cilindros" ? "Cilindros hidráulicos" : "Blocos hidráulicos"),
-                      refs: q.refs.includes(active.code) ? q.refs.filter((r) => r !== active.code) : [...q.refs, active.code],
+                    commit("Segmento adicionado", (c) => ({
+                      ...c,
+                      sectors: [...c.sectors, { id: crypto.randomUUID(), name: "Novo segmento", code: `SEC-${String(c.sectors.length + 1).padStart(2, "0")}` }],
                     }))
                   }
                 >
-                  {quote.refs.includes(active.code) ? "Incluído no orçamento ✓" : "+ Incluir no orçamento"}
+                  + Adicionar segmento
                 </button>
+              </li>
+            )}
+          </ul>
+        </section>
+
+        <QuoteBuilder company={company} sectors={sectors} services={services} quote={quote} setQuote={setQuote} />
+        <SiteFooter company={company} logged={logged} onEdit={() => setEditing(true)} nav={footerNav} />
+
+        <div className="cursor-label" ref={cursor} aria-hidden="true">
+          {editing ? "Editar" : tx("catalog.cursor", "Ver peça")}
+        </div>
+        {active && (
+          <div className="part-overlay" data-lenis-prevent onClick={() => setActiveId(null)}>
+            <div className="part-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby="part-title" onClick={(e) => e.stopPropagation()}>
+              <div className="part-dialog-top tiny-mono">
+                <span>
+                  {active.code} · {activeIndex + 1} / {parts.length}
+                </span>
+                <span className="part-nav">
+                  <button onClick={() => step(-1)} aria-label="Peça anterior">
+                    ←
+                  </button>
+                  <button onClick={() => step(1)} aria-label="Próxima peça">
+                    →
+                  </button>
+                  <button onClick={() => setActiveId(null)} aria-label="Fechar detalhes">
+                    {tx("dialog.close", "FECHAR")} ×
+                  </button>
+                </span>
+              </div>
+              <button className={"part-inspect-image " + (zoom ? "zoomed" : "")} onClick={() => setZoom(!zoom)} aria-label={zoom ? "Reduzir imagem" : "Ampliar imagem"}>
+                <img src={active.imageUrl} alt={active.title} key={active.id} />
+                <span className="tiny-mono">{zoom ? `− ${tx("dialog.zoomout", "REDUZIR")}` : `+ ${tx("dialog.zoomin", "AMPLIAR DETALHES")}`}</span>
+              </button>
+              <div className="part-dialog-copy" key={active.id}>
+                <span className="eyebrow">{active.specs}</span>
+                <h2 id="part-title">{active.title}</h2>
+                <p>{active.description}</p>
+                <div className="part-actions">
+                  <a href={wa(`Olá! Gostaria de uma cotação para ${active.title} (${active.code}).`)} target="_blank" rel="noreferrer" className="solid-link">
+                    <span className="with-glyph">
+                      <Glyph name="whatsapp" /> {tx("dialog.quote", "Pedir cotação pelo WhatsApp")}
+                    </span>
+                    <Arrow />
+                  </a>
+                  <button
+                    className="ghost-link"
+                    aria-pressed={quote.refs.includes(active.code)}
+                    onClick={() =>
+                      setQuote((q) => ({
+                        ...q,
+                        type: q.type || (services.find((s) => s.category === active.category)?.title ?? ""),
+                        refs: q.refs.includes(active.code) ? q.refs.filter((r) => r !== active.code) : [...q.refs, active.code],
+                      }))
+                    }
+                  >
+                    {quote.refs.includes(active.code) ? `${tx("dialog.added", "Incluído no orçamento")} ✓` : `+ ${tx("dialog.add", "Incluir no orçamento")}`}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-      {editorPart && (
-        <ProductEditor
-          part={editorPart}
-          codes={products.filter((p) => p.id !== editorPart.id).map((p) => p.code)}
-          lenis={lenisRef.current}
-          onClose={() => setEditorPart(null)}
-          onSave={(p) =>
-            commit(products.some((x) => x.id === p.id) ? `Peça “${p.title}” atualizada` : `Peça “${p.title}” cadastrada`, (c) => ({
-              ...c,
-              products: c.products.some((x) => x.id === p.id) ? c.products.map((x) => (x.id === p.id ? p : x)) : [p, ...c.products],
-            }))
-          }
-          onDelete={(p) => commit(`Peça “${p.title}” excluída`, (c) => ({ ...c, products: c.products.filter((x) => x.id !== p.id) }))}
-        />
-      )}
-      {companyOpen && (
-        <CompanyPanel
-          company={company}
-          lenis={lenisRef.current}
-          onClose={() => setCompanyOpen(false)}
-          onSave={(co) => commit("Dados da empresa alterados", (c) => ({ ...c, company: { ...c.company, ...co } }))}
-        />
-      )}
-      {adminsOpen && <AdminsPanel lenis={lenisRef.current} onClose={() => setAdminsOpen(false)} />}
-      {logged && (
-        <EditBar
-          editing={editing}
-          setEditing={setEditing}
-          state={save}
-          storage={storage}
-          canUndo={undo.length > 0}
-          onUndo={undoLast}
-          hint={hint}
-          onHintClose={() => {
-            setHint(false);
-            safeStorage.set("usibar-edit-hint", "1");
-          }}
-          onAdd={() => setEditorPart({ ...blankPart })}
-          onCompany={() => setCompanyOpen(true)}
-          onAdmins={accounts ? () => setAdminsOpen(true) : undefined}
-          onLogout={async () => {
-            await Promise.all([
-              fetch("/api/auth", { method: "DELETE" }).catch(() => {}),
-              signOut(),
-            ]);
-            setEditing(false);
-            setLogged(false);
-          }}
-        />
-      )}
-    </main>
+        )}
+        {editorPart && (
+          <ProductEditor
+            part={editorPart}
+            codes={products.filter((p) => p.id !== editorPart.id).map((p) => p.code)}
+            lenis={lenisRef.current}
+            onClose={() => setEditorPart(null)}
+            onSave={(p) =>
+              commit(products.some((x) => x.id === p.id) ? `Peça “${p.title}” atualizada` : `Peça “${p.title}” cadastrada`, (c) => ({
+                ...c,
+                products: c.products.some((x) => x.id === p.id) ? c.products.map((x) => (x.id === p.id ? p : x)) : [p, ...c.products],
+              }))
+            }
+            onDelete={(p) => commit(`Peça “${p.title}” excluída`, (c) => ({ ...c, products: c.products.filter((x) => x.id !== p.id) }))}
+          />
+        )}
+        {companyOpen && (
+          <CompanyPanel
+            company={company}
+            lenis={lenisRef.current}
+            onClose={() => setCompanyOpen(false)}
+            onSave={(co) => commit("Dados da empresa alterados", (c) => ({ ...c, company: { ...c.company, ...co } }))}
+          />
+        )}
+        {adminsOpen && <AdminsPanel lenis={lenisRef.current} onClose={() => setAdminsOpen(false)} />}
+        {logged && (
+          <EditBar
+            editing={editing}
+            setEditing={setEditing}
+            state={save}
+            storage={storage}
+            canUndo={undo.length > 0}
+            onUndo={undoLast}
+            hint={hint}
+            onHintClose={() => {
+              setHint(false);
+              safeStorage.set("usibar-edit-hint", "1");
+            }}
+            onAdd={() => setEditorPart({ ...blankPart })}
+            onCompany={() => setCompanyOpen(true)}
+            onAdmins={accounts ? () => setAdminsOpen(true) : undefined}
+            onLogout={async () => {
+              await Promise.all([fetch("/api/auth", { method: "DELETE" }).catch(() => {}), signOut()]);
+              setEditing(false);
+              setLogged(false);
+            }}
+          />
+        )}
+      </main>
+    </CopyContext.Provider>
   );
 }

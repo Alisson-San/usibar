@@ -33,6 +33,8 @@ const imageCheck = (remoteBase) => {
     (/^\/(assets|uploads)\/[a-zA-Z0-9_-]+\.(webp|png|jpg|jpeg)$/.test(v) ||
       Boolean(remote?.test(v)));
 };
+export const SOCIAL_NETWORKS = ["instagram", "facebook", "linkedin", "youtube", "tiktok", "x", "site"];
+
 /**
  * @param {any} data
  * @param {{ remoteBase?: string | null }} [options]
@@ -95,6 +97,39 @@ export function validData(data, { remoteBase = null } = {}) {
   )
     return false;
   if ("motto" in c && !text(c.motto, 200)) return false;
+  if ("address" in c && !text(c.address, 200)) return false;
+  if ("zip" in c && !(typeof c.zip === "string" && /^\d{5}-?\d{3}$/.test(c.zip))) return false;
+  if ("heroImageUrl" in c && !image(c.heroImageUrl)) return false;
+  if (
+    "socials" in c &&
+    !(
+      Array.isArray(c.socials) &&
+      c.socials.length <= 10 &&
+      unique(c.socials) &&
+      c.socials.every(
+        (s) =>
+          s &&
+          text(s.id, 80) &&
+          SOCIAL_NETWORKS.includes(s.network) &&
+          typeof s.url === "string" &&
+          s.url.length <= 300 &&
+          /^https:\/\/[^\s"'<>]+$/.test(s.url),
+      )
+    )
+  )
+    return false;
+  // Free texts of the page, keyed by place ("hero.title.1"); defaults live in the code.
+  if (
+    "copy" in data &&
+    !(
+      data.copy &&
+      typeof data.copy === "object" &&
+      !Array.isArray(data.copy) &&
+      Object.keys(data.copy).length <= 400 &&
+      Object.entries(data.copy).every(([k, v]) => /^[a-z0-9][a-z0-9._-]{0,59}$/.test(k) && text(v, 1200))
+    )
+  )
+    return false;
   if (
     "services" in data &&
     !(
