@@ -64,6 +64,7 @@ export async function POST(req: Request) {
     } catch (e) {
       if ([401, 403].includes((e as { status?: number }).status ?? 0))
         return NextResponse.json({ error: "Sem permissão para enviar. Entre novamente." }, { status: 401 });
+      console.error("[api/upload] envio da imagem falhou:", e);
       return NextResponse.json(
         { error: "Não foi possível guardar a imagem." },
         { status: 502 },

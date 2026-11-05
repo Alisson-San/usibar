@@ -15,7 +15,16 @@
     "aboutParagraph3": "Os componentes são desenvolvidos conforme as especificações de cada projeto.",
     "logoDarkUrl": "/assets/logo-usibar-dark.webp",
     "benchImageUrl": "/assets/hero-bench.webp",
-    "motto": "Tecnologia, força e desempenho em cada movimento."
+    "motto": "Tecnologia, força e desempenho em cada movimento.",
+    "address": "Rua Martin Biancho, 803 — Bairro Bela Vista",
+    "zip": "95730-000",
+    "socials": [
+      {
+        "id": "instagram",
+        "network": "instagram",
+        "url": "https://instagram.com/usibar_usinagens"
+      }
+    ]
   },
   "services": [
     {
@@ -195,5 +204,6 @@
       "description": "Bloco compacto para integração em unidades hidráulicas móveis ou estacionárias. Configuração conforme projeto.",
       "imageUrl": "/assets/bloco-compacto.webp"
     }
-  ]
+  ],
+  "copy": {}
 }

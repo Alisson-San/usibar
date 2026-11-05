@@ -12,18 +12,19 @@ Visual bege, grafite e laranja, com textos tirados da apresentação institucion
 4. **Catálogo** — oito fotografias reais; no detalhe de uma peça dá para navegar entre modelos, pedir cotação ou incluí-la como referência no orçamento.
 5. **Empresa e pilares** — qualidade, parceria, inovação e foco no cliente.
 6. **Segmentos** — com ícones técnicos e o destaque em elevadores hidráulicos.
-7. **Orçamento guiado** — o cliente escolhe produto, aplicação, quantidade e se tem desenho; a prévia mostra a mensagem exata, enviada pelo WhatsApp ou por e-mail. Nada é armazenado.
+7. **Orçamento em etapas** — uma pergunta por vez (produto, aplicação, quantidade, desenho), com cartões grandes, progresso, voltar e pular; na revisão o cliente confere tudo e envia pelo WhatsApp ou por e-mail. Ao lado, contato direto com ícones, endereço completo (Rua Martin Biancho, 803 — Bairro Bela Vista, Barão/RS, CEP 95730-000) e “como chegar”. Nada é armazenado.
 
-O cabeçalho indica a seção atual e se recolhe durante a leitura. Metadados de compartilhamento e dados estruturados (schema.org) usam os contatos reais. As animações e desenhos são ilustrativos; as fotografias preservam as peças, com resolução limitada aos originais.
+Navegação: as seções são folhas numeradas. À direita, um cilindro hidráulico vertical funciona como trilho de navegação: a haste avança conforme a leitura e cada estação leva à sua seção. O botão “Índice” abre um índice de folhas em tela cheia com os contatos. O cabeçalho indica a seção atual e se recolhe durante a leitura. Metadados de compartilhamento e dados estruturados (schema.org) usam os contatos reais. As animações e desenhos são ilustrativos; as fotografias preservam as peças, com resolução limitada aos originais.
 
 ## Edição direto no site
 
 A edição acontece na própria página. Entre em /admin com e-mail e senha (Supabase Auth); você volta ao início com o modo de edição ativo e uma barra no rodapé da tela. Na primeira vez, um aviso resume como editar.
 
-- textos com contorno tracejado são editados com um clique (Enter confirma, Esc cancela): lema, subtítulo, cidade, anos de experiência, títulos e textos das soluções, parágrafos da empresa, pilares, segmentos e os textos das três etapas do processo — estes direto dentro da animação;
+- praticamente todo texto da página tem contorno tracejado e é editado com um clique (Enter confirma, Esc cancela): títulos e rótulos de todas as seções, botões, menu, faixa de fatos, legendas da foto do topo, carimbo e painel da animação do processo, textos do orçamento e do rodapé. Os textos fixos ficam em `copy` (chave → texto); o padrão está no código, então campos novos nunca exigem migração;
+- fotos do topo, da empresa e das soluções têm o botão “Trocar foto” no próprio lugar (as legendas técnicas do topo só aparecem sobre a foto original, que é onde apontam);
 - “+ Nova peça” ou o cartão “Cadastrar nova peça” abre o cadastro com foto (arraste ou clique), código, categoria, especificações, nome, descrição e destaque; clicar em uma peça abre a edição dela, com troca de foto e exclusão;
 - segmentos podem ser adicionados e removidos na própria lista;
-- “Empresa e contatos” reúne nome, slogan, telefone, WhatsApp, e-mail, Instagram e os demais dados.
+- “Empresa e contatos” reúne nome, slogan, lema, telefone, WhatsApp, e-mail, endereço, cidade, CEP, parágrafos e as redes sociais (Instagram, Facebook, LinkedIn, YouTube, TikTok, X ou site), que aparecem com ícone no contato, no índice e no rodapé.
 
 Cada alteração confirmada é publicada na hora; a barra mostra o que foi salvo e onde (no Supabase ou, em desenvolvimento local, neste computador). “Desfazer” ou Ctrl+Z revertem as últimas 20 alterações, inclusive exclusões. Se o servidor recusar, a página volta ao último estado salvo e mostra o motivo.
 

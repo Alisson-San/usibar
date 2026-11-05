@@ -26,7 +26,11 @@ const mono = JetBrains_Mono({
 const c = seed.company;
 const description =
   "Cilindros hidráulicos de simples e dupla ação, blocos hidráulicos (manifolds) e usinagem CNC sob medida. Mais de 20 anos de experiência, em Barão/RS.";
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Usibar Usinagens Especiais | Cilindros e blocos hidráulicos sob medida — Barão/RS",
   description,
   openGraph: {
@@ -46,8 +50,15 @@ const organization = {
   description,
   email: c.email,
   telephone: "+" + c.whatsapp,
-  address: { "@type": "PostalAddress", addressLocality: "Barão", addressRegion: "RS", addressCountry: "BR" },
-  sameAs: [`https://instagram.com/${c.instagram}`],
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "Rua Martin Biancho, 803 — Bairro Bela Vista",
+    addressLocality: "Barão",
+    addressRegion: "RS",
+    postalCode: "95730-000",
+    addressCountry: "BR",
+  },
+  sameAs: c.socials?.map((s) => s.url) ?? [`https://instagram.com/${c.instagram}`],
 };
 
 export default function RootLayout({
