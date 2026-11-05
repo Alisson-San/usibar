@@ -4,7 +4,9 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import { ProcessSection, type Step } from "./ProcessSection";
+import { authFetch, hasStoredSession, isAdmin, signOut } from "@/lib/browser-auth";
 import {
+  AdminsPanel,
   blankPart,
   CompanyPanel,
   EditBar,
@@ -84,6 +86,8 @@ export default function UsibarHome() {
     [quote, setQuote] = useState<Quote>(emptyQuote),
     [logged, setLogged] = useState(false),
     [storage, setStorage] = useState("file"),
+    [accounts, setAccounts] = useState(false),
+    [adminsOpen, setAdminsOpen] = useState(false),
     [editing, setEditing] = useState(false),
     [save, setSave] = useState<SaveState>({ kind: "idle" }),
     [undo, setUndo] = useState<Undo[]>([]),
@@ -122,10 +126,15 @@ export default function UsibarHome() {
       .catch(() => setFailed(true));
     fetch("/api/auth", { cache: "no-store" })
       .then((r) => r.json())
-      .then((a) => {
-        if (!a.authenticated || a.demoMode) return;
+      .then(async (a) => {
+        if (a.demoMode) return;
+        let ok = !!a.authenticated;
+        // Supabase mode: restore the admin session only if this browser has one.
+        if (!ok && a.login === "supabase" && hasStoredSession()) ok = await isAdmin();
+        if (!ok) return;
         setLogged(true);
         setStorage(a.storage ?? "file");
+        setAccounts(a.login === "supabase");
         const url = new URL(location.href);
         if (url.searchParams.has("editar")) {
           setEditing(true);
@@ -146,7 +155,7 @@ export default function UsibarHome() {
     setSave({ kind: "saving" });
     const run = async () => {
       try {
-        const res = await fetch("/api/company", {
+        const res = await authFetch("/api/company", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(next),
@@ -782,6 +791,7 @@ export default function UsibarHome() {
           onSave={(co) => commit("Dados da empresa alterados", (c) => ({ ...c, company: { ...c.company, ...co } }))}
         />
       )}
+      {adminsOpen && <AdminsPanel lenis={lenisRef.current} onClose={() => setAdminsOpen(false)} />}
       {logged && (
         <EditBar
           editing={editing}
@@ -797,8 +807,12 @@ export default function UsibarHome() {
           }}
           onAdd={() => setEditorPart({ ...blankPart })}
           onCompany={() => setCompanyOpen(true)}
+          onAdmins={accounts ? () => setAdminsOpen(true) : undefined}
           onLogout={async () => {
-            await fetch("/api/auth", { method: "DELETE" }).catch(() => {});
+            await Promise.all([
+              fetch("/api/auth", { method: "DELETE" }).catch(() => {}),
+              signOut(),
+            ]);
             setEditing(false);
             setLogged(false);
           }}
