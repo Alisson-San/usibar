@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { authorize, sameOrigin } from "@/lib/auth";
-import { imageBase, readOnlyError, store } from "@/lib/content";
+import { bundled, imageBase, readOnlyError, store } from "@/lib/content";
 import { validData } from "@/lib/security.mjs";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// Visitors always get a page: if the content store cannot be read, the catalog shipped with
+// the code is served and marked "stale", so the editor refuses to save over the real data.
 export async function GET() {
   try {
     return NextResponse.json(await store().read(), {
       headers: { "Cache-Control": "no-store" },
     });
-  } catch {
+  } catch (e) {
+    console.error("[api/company] leitura do conteúdo falhou:", e);
     return NextResponse.json(
-      { error: "Não foi possível carregar os dados." },
-      { status: 500 },
+      { ...bundled, stale: true },
+      { headers: { "Cache-Control": "no-store", "X-Content-Source": "bundled-fallback" } },
     );
   }
 }
@@ -48,6 +51,7 @@ export async function POST(req: Request) {
   } catch (e) {
     if ([401, 403].includes((e as { status?: number }).status ?? 0))
       return NextResponse.json({ error: "Sem permissão para salvar. Entre novamente." }, { status: 401 });
+    console.error("[api/company] gravação do conteúdo falhou:", e);
     return NextResponse.json(
       { error: "Não foi possível salvar os dados." },
       { status: 502 },

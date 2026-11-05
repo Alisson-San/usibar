@@ -1,9 +1,10 @@
 import seed from "../../data/db.json";
 import { getStore, remoteImageBase } from "./storage.mjs";
 
-const { adminPassword: _secret, ...bundled } = seed as typeof seed & {
+const { adminPassword: _secret, ...catalog } = seed as typeof seed & {
   adminPassword?: string;
 };
+export const bundled = catalog;
 export const store = () => getStore({ seed: bundled });
 export const imageBase = () => remoteImageBase();
 export const readOnlyError =

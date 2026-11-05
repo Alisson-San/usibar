@@ -117,6 +117,7 @@ export default function UsibarHome() {
     contentRef = useRef<Content | null>(null),
     savedRef = useRef<Content | null>(null),
     queue = useRef<Promise<unknown>>(Promise.resolve()),
+    stale = useRef(false),
     loaded = !!content;
 
   useEffect(() => {
@@ -136,6 +137,7 @@ export default function UsibarHome() {
           copy: d.copy ?? {},
         };
         contentRef.current = savedRef.current = c;
+        stale.current = d.stale === true;
         setContent(c);
       })
       .catch(() => setFailed(true));
@@ -163,6 +165,11 @@ export default function UsibarHome() {
   // Each confirmed change is published at once, in order. A failure restores the
   // last version the server accepted; a success can be undone from the edit bar.
   const commit = useCallback((label: string, change: (c: Content) => Content, recordUndo = true) => {
+    // Content served from the bundled copy (store unreachable) must never overwrite the real data.
+    if (stale.current) {
+      setSave({ kind: "error", message: "O conteúdo salvo não pôde ser lido agora; a edição está pausada. Recarregue a página." });
+      return Promise.resolve(false);
+    }
     const before = contentRef.current!;
     const next = change(before);
     contentRef.current = next;
