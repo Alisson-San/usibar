@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import { authorized, sameOrigin } from "@/lib/auth";
+import { authorize, sameOrigin } from "@/lib/auth";
 import { removeBackground } from "@/lib/cutout.mjs";
 import { readOnlyError, store } from "@/lib/content";
 export const runtime = "nodejs";
+// Saves Supabase storage and egress: longest side 1600 px, WebP, at most 1 MB (bucket limit).
+const MAX_SIDE = 1600;
+const MAX_RESULT = 1024 * 1024;
 export async function POST(req: Request) {
   const s = store();
   if (s.readonly)
     return NextResponse.json({ error: readOnlyError }, { status: 403 });
   if (!sameOrigin(req))
     return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
-  if (!(await authorized()))
+  const access = await authorize(req);
+  if (!access.ok)
     return NextResponse.json(
       { error: "Sessão expirada. Entre novamente." },
       { status: 401 },
@@ -39,7 +43,7 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let pipeline = sharp(buffer, { limitInputPixels: 25000000 })
       .rotate()
-      .resize(1100, 850, { fit: "inside", withoutEnlargement: true });
+      .resize(MAX_SIDE, MAX_SIDE, { fit: "inside", withoutEnlargement: true });
     if (form.get("removeBg") === "true") {
       const { data, info } = await pipeline
         .ensureAlpha()
@@ -49,10 +53,17 @@ export async function POST(req: Request) {
         raw: { width: info.width, height: info.height, channels: 4 },
       });
     }
-    const webp = await pipeline.webp({ quality: 90 }).toBuffer();
+    const webp = await pipeline.webp({ quality: 80 }).toBuffer();
+    if (webp.length > MAX_RESULT)
+      return NextResponse.json(
+        { error: "A imagem continua acima de 1 MB depois da compressão. Use uma foto menor ou mais simples." },
+        { status: 413 },
+      );
     try {
-      return NextResponse.json({ url: await s.saveImage(webp) });
-    } catch {
+      return NextResponse.json({ url: await s.saveImage(webp, access.ok ? access.token : undefined) });
+    } catch (e) {
+      if ([401, 403].includes((e as { status?: number }).status ?? 0))
+        return NextResponse.json({ error: "Sem permissão para enviar. Entre novamente." }, { status: 401 });
       return NextResponse.json(
         { error: "Não foi possível guardar a imagem." },
         { status: 502 },

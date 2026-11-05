@@ -1,3 +1,4 @@
+// Local file mode only: run the server with USIBAR_STORAGE=file ADMIN_PASSWORD=... (see README).
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 const base = process.env.TEST_BASE || "http://127.0.0.1:3000";

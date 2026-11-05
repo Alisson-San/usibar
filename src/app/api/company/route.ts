@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authorized, sameOrigin } from "@/lib/auth";
+import { authorize, sameOrigin } from "@/lib/auth";
 import { imageBase, readOnlyError, store } from "@/lib/content";
 import { validData } from "@/lib/security.mjs";
 export const dynamic = "force-dynamic";
@@ -22,7 +22,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: readOnlyError }, { status: 403 });
   if (!sameOrigin(req))
     return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
-  if (!(await authorized()))
+  const access = await authorize(req);
+  if (!access.ok)
     return NextResponse.json(
       { error: "Sessão expirada. Entre novamente." },
       { status: 401 },
@@ -42,9 +43,11 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   try {
-    await s.write(body);
+    await s.write(body, access.ok ? access.token : undefined);
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (e) {
+    if ([401, 403].includes((e as { status?: number }).status ?? 0))
+      return NextResponse.json({ error: "Sem permissão para salvar. Entre novamente." }, { status: 401 });
     return NextResponse.json(
       { error: "Não foi possível salvar os dados." },
       { status: 502 },

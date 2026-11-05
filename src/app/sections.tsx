@@ -456,6 +456,9 @@ export function SiteFooter({ company, logged, onEdit }: { company: Company; logg
         </span>
         <span>CILINDROS · BLOCOS HIDRÁULICOS · USINAGEM CNC</span>
         {logged ? <button onClick={onEdit}>Editar site ↗</button> : <a href="/admin">Área administrativa ↗</a>}
+        <a className="footer-credit" href="https://nodenhub.com.br" target="_blank" rel="noopener">
+          Desenvolvido por Noden
+        </a>
       </div>
     </footer>
   );

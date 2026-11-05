@@ -88,3 +88,19 @@ test("reject service with unknown category", () =>
     validData({ ...publicData, services: [{ ...sample.services[0], category: "x" }] }),
     false,
   ));
+
+test("accepts photos from the usibar bucket of the central project", () => {
+  const base = "https://rwkvsepkevhqzpltmsck.supabase.co/storage/v1/object/public/usibar/";
+  const ok = `${base}usibar-123e4567-e89b-12d3-a456-426614174000.webp`;
+  assert.equal(
+    validData({ ...publicData, products: [{ ...sample.products[0], imageUrl: ok }] }, { remoteBase: base }),
+    true,
+  );
+  assert.equal(
+    validData(
+      { ...publicData, products: [{ ...sample.products[0], imageUrl: ok.replace("/usibar/usibar-", "/outro/usibar-") }] },
+      { remoteBase: base },
+    ),
+    false,
+  );
+});

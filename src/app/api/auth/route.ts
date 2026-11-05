@@ -1,17 +1,29 @@
 import { isDemo } from "@/lib/runtime.mjs";
 import { store } from "@/lib/content";
 import { NextResponse } from "next/server";
-import { authorized, sameOrigin } from "@/lib/auth";
-import { createSession, equal } from "@/lib/security.mjs";
+import { sameOrigin } from "@/lib/auth";
+import { createSession, equal, validSession } from "@/lib/security.mjs";
+import { useLocalFiles } from "@/lib/storage.mjs";
+import { cookies } from "next/headers";
 export const runtime = "nodejs";
+
+// Production uses Supabase Auth in the browser; this route only describes the mode.
+// The password cookie below exists solely for local development (USIBAR_STORAGE=file).
 let attempts = 0,
   reset = 0;
 export async function GET() {
+  const local = !isDemo() && useLocalFiles();
   return NextResponse.json(
     {
-      authenticated: isDemo() ? false : await authorized(),
+      authenticated: local
+        ? validSession(
+            (await cookies()).get("usibar-session")?.value,
+            process.env.ADMIN_PASSWORD || "",
+          )
+        : false,
       demoMode: isDemo(),
       storage: store().kind,
+      login: local ? "password" : "supabase",
     },
     { headers: { "Cache-Control": "no-store" } },
   );
@@ -25,7 +37,11 @@ export async function POST(req: Request) {
       },
       { status: 403 },
     );
-
+  if (!useLocalFiles())
+    return NextResponse.json(
+      { error: "O acesso é feito com a conta do Supabase." },
+      { status: 404 },
+    );
   if (!sameOrigin(req))
     return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
   if (Date.now() > reset) {

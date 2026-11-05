@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { adminCall, authFetch, changeMyPassword, type AdminRow } from "@/lib/browser-auth";
 
 export type Part = {
   id: string;
@@ -171,7 +172,7 @@ export function ProductEditor({
       const fd = new FormData();
       fd.append("file", file);
       fd.append("removeBg", String(removeBg));
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const res = await authFetch("/api/upload", { method: "POST", body: fd });
       if (!res.ok) throw Error((await readError(res)) || "Falha no envio.");
       set("imageUrl", (await res.json()).url);
       setMsg("");
@@ -480,6 +481,7 @@ export function EditBar({
   hint,
   onHintClose,
   onCompany,
+  onAdmins,
   onAdd,
   onLogout,
 }: {
@@ -492,6 +494,7 @@ export function EditBar({
   hint: boolean;
   onHintClose: () => void;
   onCompany: () => void;
+  onAdmins?: () => void;
   onAdd: () => void;
   onLogout: () => void;
 }) {
@@ -534,11 +537,179 @@ export function EditBar({
           </button>
           <button onClick={onAdd}>+ Nova peça</button>
           <button onClick={onCompany}>Empresa e contatos</button>
+          {onAdmins && <button onClick={onAdmins}>Administradores</button>}
         </>
       )}
       <button className="edit-logout" onClick={onLogout}>
         Sair
       </button>
+    </div>
+  );
+}
+
+// Who may edit this site, and the signed-in admin's own password.
+export function AdminsPanel({
+  lenis,
+  onClose,
+}: {
+  lenis: { stop(): void; start(): void } | null;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [admins, setAdmins] = useState<AdminRow[] | null>(null),
+    [email, setEmail] = useState(""),
+    [pw, setPw] = useState(""),
+    [pw2, setPw2] = useState(""),
+    [mine, setMine] = useState(""),
+    [mine2, setMine2] = useState(""),
+    [confirmRemove, setConfirmRemove] = useState<string | null>(null),
+    [busy, setBusy] = useState(false),
+    [msg, setMsg] = useState("");
+  useModal(true, ref, () => !busy && onClose(), lenis);
+  const load = useCallback(async () => {
+    try {
+      setAdmins((await adminCall<{ admins: AdminRow[] }>("list")).admins);
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const run = async (work: () => Promise<string>) => {
+    setBusy(true);
+    setMsg("");
+    try {
+      setMsg(await work());
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="part-overlay" data-lenis-prevent onClick={() => !busy && onClose()}>
+      <div
+        ref={ref}
+        className="part-dialog company-panel admins-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Administradores"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="part-dialog-top tiny-mono">
+          <span>ADMINISTRADORES</span>
+          <button type="button" onClick={onClose} disabled={busy}>
+            FECHAR ×
+          </button>
+        </div>
+        <ul className="admins-list" aria-busy={!admins}>
+          {admins?.length === 0 && <li className="tiny-mono">Nenhum administrador cadastrado ainda.</li>}
+          {admins?.map((a) => (
+            <li key={a.email}>
+              <span>{a.email}</span>
+              {confirmRemove === a.email ? (
+                <span className="admins-confirm">
+                  <span>Remover o acesso?</span>
+                  <button
+                    type="button"
+                    className="danger-link"
+                    disabled={busy}
+                    onClick={() =>
+                      run(async () => {
+                        await adminCall("remove", { email: a.email });
+                        setConfirmRemove(null);
+                        await load();
+                        return `${a.email} não administra mais o site.`;
+                      })
+                    }
+                  >
+                    Sim, remover
+                  </button>
+                  <button type="button" disabled={busy} onClick={() => setConfirmRemove(null)}>
+                    Cancelar
+                  </button>
+                </span>
+              ) : (
+                <button type="button" disabled={busy} onClick={() => setConfirmRemove(a.email)}>
+                  Remover
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+        <form
+          className="company-grid"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (pw.length < 10) return setMsg("A senha precisa de ao menos 10 caracteres.");
+            if (pw !== pw2) return setMsg("As senhas não coincidem.");
+            void run(async () => {
+              const r = await adminCall<{ existingAccount?: boolean }>("add", {
+                email: email.trim(),
+                password: pw,
+              });
+              const who = email.trim();
+              setEmail("");
+              setPw("");
+              setPw2("");
+              await load();
+              return r.existingAccount
+                ? `${who} já tinha conta e agora administra o site. A pessoa mantém a senha atual dela.`
+                : `${who} foi adicionado(a). Passe a senha informada por um canal seguro.`;
+            });
+          }}
+        >
+          <label className="wide">
+            <span className="tiny-mono">Novo administrador — e-mail</span>
+            <input type="email" required maxLength={200} value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label>
+            <span className="tiny-mono">Senha (mín. 10 caracteres)</span>
+            <input type="password" required minLength={10} autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
+          </label>
+          <label>
+            <span className="tiny-mono">Confirmar senha</span>
+            <input type="password" required minLength={10} autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
+          </label>
+          <div className="editor-actions wide">
+            <button className="solid-link" disabled={busy}>
+              Adicionar administrador ↗
+            </button>
+          </div>
+        </form>
+        <form
+          className="company-grid"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (mine.length < 10) return setMsg("A nova senha precisa de ao menos 10 caracteres.");
+            if (mine !== mine2) return setMsg("As senhas não coincidem.");
+            void run(async () => {
+              await changeMyPassword(mine);
+              setMine("");
+              setMine2("");
+              return "Sua senha foi alterada.";
+            });
+          }}
+        >
+          <label>
+            <span className="tiny-mono">Alterar minha senha — nova senha</span>
+            <input type="password" required minLength={10} autoComplete="new-password" value={mine} onChange={(e) => setMine(e.target.value)} />
+          </label>
+          <label>
+            <span className="tiny-mono">Confirmar nova senha</span>
+            <input type="password" required minLength={10} autoComplete="new-password" value={mine2} onChange={(e) => setMine2(e.target.value)} />
+          </label>
+          <div className="editor-actions wide">
+            <button className="solid-link" disabled={busy}>
+              Alterar minha senha ↗
+            </button>
+          </div>
+        </form>
+        <p role="status" aria-live="polite" className="editor-msg">
+          {msg}
+        </p>
+      </div>
     </div>
   );
 }
