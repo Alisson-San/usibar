@@ -2,14 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isDemo } from "../src/lib/runtime.mjs";
 test("local remains editable", () => assert.equal(isDemo({}), false));
-test("Vercel disables local disk mutations", () =>
-  assert.equal(isDemo({ VERCEL: "1" }), true));
-test("explicit demo can be rehearsed locally", () =>
-  assert.equal(isDemo({ DEMO_MODE: "true" }), true));
-test("cannot enable local storage on Vercel through a false demo flag", () =>
-  assert.equal(isDemo({ VERCEL: "1", DEMO_MODE: "false" }), true));
-test("Supabase storage makes Vercel editable", () =>
-  assert.equal(
-    isDemo({ VERCEL: "1", SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "k" }),
-    false,
-  ));
+test("Vercel is editable: Supabase Auth guards the writes", () =>
+  assert.equal(isDemo({ VERCEL: "1" }), false));
+test("explicit demo can be rehearsed anywhere", () => {
+  assert.equal(isDemo({ DEMO_MODE: "true" }), true);
+  assert.equal(isDemo({ DEMO_MODE: "true", VERCEL: "1" }), true);
+});
+test("a false demo flag does not enable the demo", () =>
+  assert.equal(isDemo({ VERCEL: "1", DEMO_MODE: "false" }), false));

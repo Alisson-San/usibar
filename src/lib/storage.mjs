@@ -1,28 +1,55 @@
 // Where the site content and uploaded photos live. Three back ends share one shape:
-//   file      local development: data/db.json + data/uploads
-//   supabase  durable storage (Postgres row + Storage bucket), used whenever configured
+//   file      local development only (USIBAR_STORAGE=file): data/db.json + data/uploads
+//   supabase  durable storage in the central Supabase project (schema "usibar" + bucket "usibar");
+//             reads are public, writes carry the signed-in admin's JWT and RLS decides
 //   bundled   read-only copy shipped with the build (Vercel demonstration)
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { isDemo } from "./runtime.mjs";
+import { SITE_ID, SUPABASE_DEFAULTS } from "./supabase-config.mjs";
 
 export const CONTENT_KEYS = ["company", "products", "sectors", "process", "services", "pillars"];
 const ROW_ID = "main";
 
+export { SITE_ID, SUPABASE_DEFAULTS };
+
 export function supabaseSettings(env = process.env) {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return null;
   return {
-    url: env.SUPABASE_URL.replace(/\/+$/, ""),
-    key: env.SUPABASE_SERVICE_ROLE_KEY,
-    bucket: env.SUPABASE_BUCKET || "catalog",
+    url: (env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_DEFAULTS.url).replace(/\/+$/, ""),
+    key: env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || SUPABASE_DEFAULTS.key,
+    bucket: env.SUPABASE_BUCKET || SUPABASE_DEFAULTS.bucket,
   };
+}
+
+// Local development can opt out of Supabase and keep everything on disk (USIBAR_STORAGE=file).
+export const useLocalFiles = (env = process.env) =>
+  env.USIBAR_STORAGE === "file" && env.VERCEL !== "1";
+
+// True when the bearer token belongs to an admin of this site (database decides, via RLS helper).
+export async function isSiteAdmin(settings, token, fetchImpl = fetch) {
+  if (typeof token !== "string" || token.length < 20 || token.length > 4096) return false;
+  try {
+    const res = await fetchImpl(`${settings.url}/rest/v1/rpc/is_site_admin`, {
+      method: "POST",
+      headers: {
+        apikey: settings.key,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_site: SITE_ID }),
+      cache: "no-store",
+    });
+    return res.ok && (await res.json()) === true;
+  } catch {
+    return false;
+  }
 }
 
 // Public URL prefix of uploaded photos, so validation can accept them.
 export function remoteImageBase(env = process.env) {
   const s = supabaseSettings(env);
-  return s ? `${s.url}/storage/v1/object/public/${s.bucket}/` : null;
+  return `${s.url}/storage/v1/object/public/${s.bucket}/`;
 }
 
 const pick = (data) =>
@@ -64,51 +91,64 @@ export function bundledStore(catalog) {
 
 export function supabaseStore(settings, seed, fetchImpl = fetch) {
   const { url, key, bucket } = settings;
-  const headers = { apikey: key, Authorization: `Bearer ${key}` };
   const fail = async (res, what) => {
     const detail = await res.text().catch(() => "");
     throw Object.assign(Error(`Supabase: falha ao ${what} (${res.status}). ${detail}`.trim()), {
-      status: 502,
+      status: res.status === 401 || res.status === 403 ? res.status : 502,
     });
+  };
+  const requireToken = (token) => {
+    if (!token) throw Object.assign(Error("Sessão expirada. Entre novamente."), { status: 401 });
+  };
+  const readRow = async (token) => {
+    const res = await fetchImpl(`${url}/rest/v1/site_content?id=eq.${ROW_ID}&select=data`, {
+      headers: {
+        apikey: key,
+        "Accept-Profile": SITE_ID,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) await fail(res, "ler o conteúdo");
+    const [row] = await res.json();
+    return row;
   };
   return {
     kind: "supabase",
     readonly: false,
     async read() {
-      const res = await fetchImpl(`${url}/rest/v1/site_content?id=eq.${ROW_ID}&select=data`, {
-        headers,
-        cache: "no-store",
-      });
-      if (!res.ok) await fail(res, "ler o conteúdo");
-      const [row] = await res.json();
       // An empty table falls back to the bundled catalog until the first save or seed.
+      const row = await readRow();
       return row ? { ...seed, ...row.data } : seed;
     },
-    async write(content) {
-      const current = await this.read();
+    // Writes run AS the signed-in admin: the user's JWT is the Authorization, so RLS decides.
+    async write(content, token) {
+      requireToken(token);
+      const row = await readRow(token);
+      const current = row ? { ...seed, ...row.data } : seed;
       const res = await fetchImpl(`${url}/rest/v1/site_content`, {
         method: "POST",
         headers: {
-          ...headers,
+          apikey: key,
+          Authorization: `Bearer ${token}`,
+          "Content-Profile": SITE_ID,
           "Content-Type": "application/json",
           Prefer: "resolution=merge-duplicates,return=minimal",
         },
-        body: JSON.stringify({
-          id: ROW_ID,
-          data: { ...current, ...pick(content) },
-          updated_at: new Date().toISOString(),
-        }),
+        body: JSON.stringify({ id: ROW_ID, data: { ...current, ...pick(content) } }),
       });
       if (!res.ok) await fail(res, "salvar o conteúdo");
     },
-    async saveImage(webp) {
+    async saveImage(webp, token) {
+      requireToken(token);
       const name = imageName();
       const res = await fetchImpl(`${url}/storage/v1/object/${bucket}/${name}`, {
         method: "POST",
         headers: {
-          ...headers,
+          apikey: key,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "image/webp",
-          "Cache-Control": "31536000",
+          "Cache-Control": "max-age=31536000",
           "x-upsert": "false",
         },
         body: webp,
@@ -123,8 +163,7 @@ export function supabaseStore(settings, seed, fetchImpl = fetch) {
  * @param {{ env?: Record<string, string | undefined>, seed?: any, root?: string, fetchImpl?: typeof fetch }} [options]
  */
 export function getStore({ env = process.env, seed, root, fetchImpl } = {}) {
-  const s = supabaseSettings(env);
   if (isDemo(env)) return bundledStore(seed);
-  if (s) return supabaseStore(s, seed, fetchImpl);
-  return fileStore(root);
+  if (useLocalFiles(env)) return fileStore(root);
+  return supabaseStore(supabaseSettings(env), seed, fetchImpl);
 }
