@@ -10,6 +10,7 @@ import {
   readGemini,
   systemPrompt,
 } from "./ai-rules.mjs";
+import { networkProblem } from "./net.mjs";
 
 // Server-only. The Google Gemini key is read from GEMINI_API_KEY (or GOOGLE_API_KEY) when the
 // route runs, so the site works, with the assistant switched off, until the key is configured.
@@ -29,8 +30,12 @@ async function ask(schema: object, facts: string, prompt: string, maxTokens: num
       signal: AbortSignal.timeout(90_000),
       cache: "no-store",
     });
-  } catch {
-    throw Object.assign(Error("Não foi possível falar com o Gemini agora."), { status: 502 });
+  } catch (e) {
+    const problem = networkProblem(e, "o Gemini");
+    throw Object.assign(Error(problem?.message ?? "Não foi possível falar com o Gemini agora."), {
+      status: problem?.kind === "timeout" ? 504 : 502,
+      cause: e,
+    });
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {

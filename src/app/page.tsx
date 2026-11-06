@@ -91,6 +91,14 @@ const companyDefaults = {
   address: "Rua Martin Biancho, 803 — Bairro Bela Vista",
   zip: "95730-000",
 };
+// The server could not read the saved content and served the copy shipped with the code;
+// editing stays paused so that copy never overwrites the real data.
+const staleMessage = (reason: unknown) =>
+  (reason === "certificate"
+    ? "O servidor não confiou no certificado da conexão com o Supabase (proxy da rede?)."
+    : reason === "network" || reason === "timeout"
+      ? "O servidor não conseguiu ler o conteúdo no Supabase."
+      : "O conteúdo salvo não pôde ser lido agora.") + " A edição está pausada; recarregue a página depois de resolver.";
 const typing = (el: EventTarget | null) =>
   el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 const safeStorage = {
@@ -143,7 +151,7 @@ export default function UsibarHome() {
     contentRef = useRef<Content | null>(null),
     savedRef = useRef<Content | null>(null),
     queue = useRef<Promise<unknown>>(Promise.resolve()),
-    stale = useRef(false),
+    stale = useRef(""),
     fields = useRef(new Map<string, Field>()),
     loaded = !!content;
   const nav = content ? buildNav(content) : [];
@@ -168,7 +176,10 @@ export default function UsibarHome() {
           layout: Array.isArray(d.layout) && d.layout.length && d.layout.every((b: Block) => knownType(b?.type)) ? d.layout : defaultLayout(),
         };
         contentRef.current = savedRef.current = c;
-        stale.current = d.stale === true;
+        if (d.stale === true) {
+          stale.current = staleMessage(d.staleReason);
+          setSave({ kind: "error", message: stale.current });
+        }
         setContent(c);
       })
       .catch(() => setFailed(true));
@@ -202,7 +213,7 @@ export default function UsibarHome() {
   const commit = useCallback((label: string, change: (c: Content) => Content, recordUndo = true) => {
     // Content served from the bundled copy (store unreachable) must never overwrite the real data.
     if (stale.current) {
-      setSave({ kind: "error", message: "O conteúdo salvo não pôde ser lido agora; a edição está pausada. Recarregue a página." });
+      setSave({ kind: "error", message: stale.current });
       return Promise.resolve(false);
     }
     const before = contentRef.current!;

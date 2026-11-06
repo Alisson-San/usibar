@@ -18,7 +18,8 @@ export async function GET() {
 export async function POST(req: Request) {
   if (isDemo()) return NextResponse.json({ error: "A demonstração não usa a IA." }, { status: 403 });
   if (!sameOrigin(req)) return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
-  if (!(await authorize(req)).ok) return NextResponse.json({ error: "Sessão expirada. Entre novamente." }, { status: 401 });
+  const access = await authorize(req);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
   if (!aiConfigured())
     return NextResponse.json(
       { error: "A IA ainda não está configurada. Defina GEMINI_API_KEY nas variáveis de ambiente do servidor." },
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
   } catch (e) {
     const { status, error } = aiError(e);
-    console.error("[api/ai] falha:", e);
+    console.error("[api/ai] falha:", ...((e as { status?: number }).status ? [error, (e as { detail?: string }).detail ?? ""] : [e]));
     return NextResponse.json({ error }, { status });
   }
 }

@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { authorize, sameOrigin } from "@/lib/auth";
 import { removeBackground } from "@/lib/cutout.mjs";
 import { readOnlyError, store } from "@/lib/content";
+import { networkProblem } from "@/lib/net.mjs";
 export const runtime = "nodejs";
 // Saves Supabase storage and egress: longest side 1600 px, WebP, at most 1 MB (bucket limit).
 const MAX_SIDE = 1600;
@@ -15,10 +16,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
   const access = await authorize(req);
   if (!access.ok)
-    return NextResponse.json(
-      { error: "Sessão expirada. Entre novamente." },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: access.error }, { status: access.status });
   if (Number(req.headers.get("content-length")) > 9 * 1024 * 1024)
     return NextResponse.json(
       { error: "Limite de 8 MB por imagem." },
@@ -64,10 +62,11 @@ export async function POST(req: Request) {
     } catch (e) {
       if ([401, 403].includes((e as { status?: number }).status ?? 0))
         return NextResponse.json({ error: "Sem permissão para enviar. Entre novamente." }, { status: 401 });
-      console.error("[api/upload] envio da imagem falhou:", e);
+      const problem = networkProblem(e, "o Supabase");
+      console.error("[api/upload] envio da imagem falhou:", problem ? problem.message : e);
       return NextResponse.json(
-        { error: "Não foi possível guardar a imagem." },
-        { status: 502 },
+        { error: problem?.message ?? "Não foi possível guardar a imagem." },
+        { status: problem ? 503 : 502 },
       );
     }
   } catch {

@@ -66,6 +66,18 @@ npm run dev
 
 Para editar sem Supabase, use USIBAR_STORAGE=file e uma ADMIN_PASSWORD própria; com o padrão, o login é o do Supabase. A senha local existente foi entregue separadamente e não integra o Git ou ZIP. Para compilar: `npm run build`; para executar produção: `npm start`.
 
+### Rede da empresa (proxy que inspeciona HTTPS)
+
+Em redes corporativas o proxy costuma abrir o HTTPS com um certificado próprio. O navegador aceita porque a TI instalou a raiz da empresa no sistema, mas o Node usa a própria lista de certificados e recusa a conexão com o Supabase e com o Gemini (`SELF_SIGNED_CERT_IN_CHAIN` no terminal). O site cai na cópia embutida do conteúdo, a edição fica pausada e a barra de edição e a curadoria avisam “O servidor do site não confiou no certificado…”.
+
+Na rede da empresa, rode o servidor local confiando nos certificados do sistema:
+
+```sh
+npm run dev:empresa
+```
+
+Se ainda falhar, peça à TI o certificado raiz do proxy em PEM (ou exporte-o pelo cadeado do navegador: certificado › raiz › exportar Base64) e aponte o Node para ele antes do `npm run dev`. No PowerShell: `$env:NODE_EXTRA_CA_CERTS="C:\certificados\raiz-empresa.pem"`. No bash: `export NODE_EXTRA_CA_CERTS=~/raiz-empresa.pem`. Nunca desligue a verificação (`NODE_TLS_REJECT_UNAUTHORIZED=0`): isso aceitaria qualquer certificado, inclusive de um atacante. Na Vercel não há esse proxy, e nada disso é necessário.
+
 Os assets WebP estão prontos em public/assets. Após trocar originais/mapeamentos, execute `npm run assets` e inclua os WebP atualizados no Git.
 
 ## Git e Vercel — demonstração

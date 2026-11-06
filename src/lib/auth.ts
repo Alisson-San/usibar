@@ -2,7 +2,10 @@ import { cookies } from "next/headers";
 import { validSession } from "./security.mjs";
 import { isSiteAdmin, supabaseSettings, useLocalFiles } from "./storage.mjs";
 
-export type Access = { ok: true; token?: string } | { ok: false };
+export type Access = { ok: true; token?: string } | { ok: false; status: number; error: string };
+
+const EXPIRED = "Sessão expirada. Entre novamente.";
+const denied = (status: number, error: string): Access => ({ ok: false, status, error });
 
 /**
  * Who may edit. With Supabase (production) the browser sends the admin's access token as a
@@ -18,17 +21,25 @@ export async function authorize(req: Request): Promise<Access> {
       (await cookies()).get("usibar-session")?.value,
       process.env.ADMIN_PASSWORD || "",
     );
-    return ok ? { ok: true } : { ok: false };
+    return ok ? { ok: true } : denied(401, EXPIRED);
   }
   const token = /^Bearer (\S+)$/.exec(req.headers.get("authorization") ?? "")?.[1];
   if (Date.now() > resetAt) {
     failures = 0;
     resetAt = Date.now() + 60000;
   }
-  if (failures >= 30) return { ok: false }; // brake for floods of bad tokens
-  if (token && (await isSiteAdmin(supabaseSettings(), token))) return { ok: true, token };
+  if (failures >= 30) return denied(429, "Muitas tentativas de acesso. Aguarde um minuto."); // brake for floods of bad tokens
+  if (token) {
+    try {
+      if (await isSiteAdmin(supabaseSettings(), token)) return { ok: true, token };
+    } catch (e) {
+      // Supabase could not be asked (network, proxy certificate): say so, not "session expired".
+      console.error("[auth] não foi possível verificar o administrador:", (e as Error).message);
+      return denied(503, (e as Error).message);
+    }
+  }
   failures++;
-  return { ok: false };
+  return denied(401, EXPIRED);
 }
 
 export function sameOrigin(req: Request) {

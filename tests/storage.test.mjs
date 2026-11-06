@@ -119,8 +119,17 @@ test("isSiteAdmin asks the database with the user's bearer", async () => {
   assert.equal(await isSiteAdmin(settings, TOKEN, fakeFetch([{ status: 401, body: {} }])), false);
   assert.equal(await isSiteAdmin(settings, "short", fakeFetch([])), false);
   assert.equal(await isSiteAdmin(settings, undefined, fakeFetch([])), false);
-  const boom = async () => { throw new Error("offline"); };
-  assert.equal(await isSiteAdmin(settings, TOKEN, boom), false);
+});
+
+test("isSiteAdmin reports an unreachable database instead of answering no", async () => {
+  const tls = async () => {
+    throw new TypeError("fetch failed", { cause: Object.assign(Error("self-signed certificate in certificate chain"), { code: "SELF_SIGNED_CERT_IN_CHAIN" }) });
+  };
+  await assert.rejects(isSiteAdmin(settings, TOKEN, tls), (e) => e.status === 503 && /certificado.*SELF_SIGNED_CERT_IN_CHAIN.*Rede da empresa/.test(e.message));
+  const offline = async () => {
+    throw new TypeError("fetch failed", { cause: Object.assign(Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" }) });
+  };
+  await assert.rejects(isSiteAdmin(settings, TOKEN, offline), (e) => e.status === 503 && /não conseguiu falar com o Supabase \(ENOTFOUND\)/.test(e.message));
 });
 
 test("file store keeps unrelated keys and strips the password", async () => {
