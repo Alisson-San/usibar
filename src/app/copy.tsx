@@ -23,6 +23,10 @@ type CopyCtx = {
   setStyle: (key: string, style: TextStyle | null, label: string) => void;
   upload: (file: File) => Promise<string | null>;
   fields: React.RefObject<Map<string, Field>>;
+  // Texts and buttons of the fixed sections that can be taken out (and put back).
+  hidden: string[];
+  setHidden: (key: string, label: string, hide: boolean) => void;
+  removables: React.RefObject<Map<string, string>>;
   active: Field | null;
   activate: (field: Field | null) => void;
 };
@@ -34,6 +38,9 @@ export const CopyContext = createContext<CopyCtx>({
   setStyle: () => {},
   upload: async () => null,
   fields: { current: new Map() },
+  hidden: [],
+  setHidden: () => {},
+  removables: { current: new Map() },
   active: null,
   activate: () => {},
 });
@@ -177,5 +184,37 @@ export function ImageSwap({ label, onChange }: { label: string; onChange: (url: 
         }}
       />
     </label>
+  );
+}
+
+/* A text or button the admin may remove from a fixed section. Visitors simply don't see it;
+   while editing it shows a "×" and, once removed, a slim "↺ Recolocar" placeholder. */
+export function Removable({ k, label, children, block = false }: { k: string; label: string; children: React.ReactNode; block?: boolean }) {
+  const { editing, hidden, setHidden, removables } = useContext(CopyContext);
+  useEffect(() => {
+    const map = removables.current;
+    map.set(k, label);
+    return () => {
+      map.delete(k);
+    };
+  }, [k, label, removables]);
+  const off = hidden.includes(k);
+  const Tag = block ? "div" : "span";
+  if (!editing) return off ? null : <>{children}</>;
+  if (off)
+    return (
+      <Tag className="removed-slot">
+        <button type="button" onClick={() => setHidden(k, label, false)}>
+          ↺ Recolocar “{label}”
+        </button>
+      </Tag>
+    );
+  return (
+    <Tag className="removable">
+      {children}
+      <button type="button" className="remove-x" aria-label={`Remover “${label}”`} title={`Remover “${label}”`} onClick={() => setHidden(k, label, true)}>
+        ×
+      </button>
+    </Tag>
   );
 }

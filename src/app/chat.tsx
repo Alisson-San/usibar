@@ -6,7 +6,9 @@ import { AUTO_ACTIONS, describeAction } from "@/lib/site-actions.mjs";
 
 export type ChatAction = { name: string; args: Record<string, unknown> };
 export type ChatSite = {
-  sections: { id: string; type: string; name: string; hidden: boolean }[];
+  sections: { id: string; type: string; name: string; hidden: boolean; blocks?: { id: string; kind: string; text: string }[] }[];
+  removables: { key: string; label: string; hidden: boolean }[];
+  notice?: object;
   products: { id: string; code: string; title: string; category: string; featured: boolean }[];
   company: Record<string, string>;
   socials: { network: string; url: string }[];
@@ -213,6 +215,9 @@ export function ChatPanel({
     ["Mudar a cor do título do catálogo para laranja"],
     ["Atualizar o telefone e o WhatsApp"],
     ["Adicionar o LinkedIn da empresa"],
+    ["Criar uma seção nova sobre a linha agrícola, com destaques e botão"],
+    ["Avisar sobre as férias coletivas de fim de ano"],
+    ["Remover o botão secundário do topo"],
   ];
   const photoIdeas: [string, string?][] = [
     ["Cadastre como peça nova no catálogo, recortando o fundo"],

@@ -11,7 +11,7 @@ import {
   sceneTimeline,
   type SceneTimeline,
 } from "./EngineeringScene";
-import { CopyContext, Editable, styleOf, T } from "./copy";
+import { CopyContext, Editable, Removable, styleOf, T } from "./copy";
 
 export type Step = { label: string; title: string; copy: string };
 
@@ -264,9 +264,11 @@ export function ProcessSection({
             </button>
           ))}
         </div>
-        <p className="process-footnote">
-          <T k="process.note" d="Desenhos e mecanismos ilustrativos. Cada componente é desenvolvido conforme a aplicação." label="Processo — nota" />
-        </p>
+        <Removable k="process.note" label="Processo — nota" block>
+          <p className="process-footnote">
+            <T k="process.note" d="Desenhos e mecanismos ilustrativos. Cada componente é desenvolvido conforme a aplicação." label="Processo — nota" />
+          </p>
+        </Removable>
       </section>
     </div>
   );

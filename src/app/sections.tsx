@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Company, Part } from "./editing";
 import type { Step } from "./ProcessSection";
-import { ImageSwap, T, useEditing, useText, type TextStyle } from "./copy";
+import { ImageSwap, Removable, T, useEditing, useText, type TextStyle } from "./copy";
 import type { Block } from "./blocks";
 import { LogoFull } from "./logo";
 
@@ -27,7 +27,10 @@ export type Content = {
   copy: Record<string, string>;
   styles: Record<string, TextStyle>;
   layout: Block[];
+  hidden: string[];
+  notice?: Notice;
 };
+export type Notice = { enabled: boolean; icon: string; title: string; text: string; start: string; end: string; button?: string; version: string };
 // Renders a field as plain text, or as an inline editor while editing.
 export type Ed = (value: string, label: string, apply: (c: Content, v: string) => Content, key?: string) => React.ReactNode;
 type Apply = (change: (c: Content) => Content, label: string) => void;
@@ -253,13 +256,15 @@ export function Solutions({
             <T k="solutions.title.2" d="que movimentam resultados." label="Soluções — título (destaque)" />
           </em>
         </h2>
-        <p>
-          <T
-            k="solutions.intro"
-            d="Componentes e sistemas projetados para garantir segurança, confiabilidade, eficiência e elevado desempenho operacional."
-            label="Soluções — introdução"
-          />
-        </p>
+        <Removable k="solutions.intro" label="Soluções — introdução" block>
+          <p>
+            <T
+              k="solutions.intro"
+              d="Componentes e sistemas projetados para garantir segurança, confiabilidade, eficiência e elevado desempenho operacional."
+              label="Soluções — introdução"
+            />
+          </p>
+        </Removable>
       </div>
       <div className="solution-grid">
         {services.map((s, i) => {
@@ -499,13 +504,15 @@ export function QuoteBuilder({
             <T k="quote.title.2" d="em quatro respostas." label="Orçamento — título (destaque)" />
           </em>
         </h2>
-        <p>
-          <T
-            k="quote.intro"
-            d="Responda com um toque e envie a mensagem pronta pelo WhatsApp ou por e-mail. A equipe avalia a aplicação e retorna com a proposta."
-            label="Orçamento — introdução"
-          />
-        </p>
+        <Removable k="quote.intro" label="Orçamento — introdução" block>
+          <p>
+            <T
+              k="quote.intro"
+              d="Responda com um toque e envie a mensagem pronta pelo WhatsApp ou por e-mail. A equipe avalia a aplicação e retorna com a proposta."
+              label="Orçamento — introdução"
+            />
+          </p>
+        </Removable>
       </div>
 
       <div className="quote-body">

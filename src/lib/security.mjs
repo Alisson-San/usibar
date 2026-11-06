@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { BUILTIN_TYPES, TEMPLATE_FIELDS } from "./site-actions.mjs";
+import { BUILTIN_TYPES, TEMPLATE_FIELDS, validBlocks, validHidden, validNotice } from "./site-actions.mjs";
 export const equal = (a, b) => {
   const x = Buffer.from(String(a)),
     y = Buffer.from(String(b));
@@ -120,6 +120,8 @@ export function validData(data, { remoteBase = null } = {}) {
   )
     return false;
   if ("styles" in data && !validStyles(data.styles)) return false;
+  if ("notice" in data && !validNotice(data.notice)) return false;
+  if ("hidden" in data && !validHidden(data.hidden)) return false;
   if ("layout" in data && !validLayout(data.layout, image)) return false;
   // Free texts of the page, keyed by place ("hero.title.1"); defaults live in the code.
   if (
@@ -221,6 +223,8 @@ function validLayout(layout, image) {
         if (!image(v)) return false;
       } else if (rule === "items") {
         if (!(Array.isArray(v) && v.length <= 6 && v.every((it) => it && text(it.value, 40) && text(it.label, 200)))) return false;
+      } else if (rule === "blocks") {
+        if (!validBlocks(v, image)) return false;
       } else if (rule === "images") {
         if (!(Array.isArray(v) && v.length <= 12 && v.every((it) => it && image(it.url) && opt(it.caption, 200)))) return false;
       } else if (k === "side") {

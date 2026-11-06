@@ -4556,3 +4556,450 @@ body {
     inset: 8px 8px auto auto;
   }
 }
+
+/* ======================================================================
+   Removable texts and buttons of the fixed sections
+   ====================================================================== */
+.removable {
+  position: relative;
+}
+div.removable {
+  display: block;
+}
+.remove-x {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  z-index: 6;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.removable:hover > .remove-x,
+.removable:focus-within > .remove-x {
+  opacity: 1;
+}
+.removed-slot {
+  display: inline-block;
+}
+div.removed-slot {
+  display: block;
+  margin: 8px 0;
+}
+.removed-slot button {
+  padding: 6px 12px;
+  border: 1px dashed var(--orange);
+  border-radius: 100px;
+  background: none;
+  color: var(--orange);
+  font: 12px var(--font-mono), monospace;
+}
+
+/* ======================================================================
+   Icons and icon picker
+   ====================================================================== */
+.ico {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  z-index: 8;
+}
+.icon-picker button {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border-radius: 6px;
+  color: var(--ink);
+}
+.icon-picker button:hover,
+.icon-picker button[aria-selected="true"] {
+  background: color-mix(in srgb, var(--orange) 14%, transparent);
+  color: var(--orange);
+}
+
+/* ======================================================================
+   Free section (blocks)
+   ====================================================================== */
+.tpl-blocks {
+  background: var(--paper);
+}
+.ub-flow {
+  max-width: 980px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.ub {
+  position: relative;
+}
+.is-editing .ub {
+  padding: 10px 0 0;
+  border-top: 1px dashed transparent;
+}
+.is-editing .ub:hover {
+  border-top-color: var(--line);
+}
+.ub-h {
+  margin: 0;
+  font: 500 clamp(24px, 2.4vw, 36px)/1.12 var(--font-display);
+  letter-spacing: -0.04em;
+}
+.tpl .ub-h.lg {
+  margin: 0;
+}
+.ub-text {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 17px;
+  line-height: 1.75;
+  color: var(--muted);
+}
+.ub-k-button .btn-ghost,
+.ub-k-button .btn-solid {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  margin: 0;
+  padding: 16px 22px;
+}
+.ub-k-button .btn-ghost {
+  border: 1px solid var(--ink);
+  color: var(--ink);
+}
+.ub-figure {
+  position: relative;
+  margin: 0;
+}
+.ub-figure img {
+  width: 100%;
+  max-height: 560px;
+  object-fit: cover;
+  background: var(--sand);
+}
+.ub-figure figcaption {
+  margin-top: 10px;
+  font: 12px var(--font-mono), monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ub-features {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  border-top: 1px solid var(--line);
+}
+.ub-features li {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 26px 24px 26px 0;
+}
+.ub-features li + li {
+  padding-left: 24px;
+  border-left: 1px solid var(--line);
+}
+.ub-features strong {
+  font-size: 19px;
+  font-weight: 500;
+}
+.ub-features span {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.ub-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  color: var(--orange);
+}
+.ub-icon:disabled {
+  cursor: default;
+}
+.ub-features .icon-picker,
+.ub-callout .icon-picker {
+  position: absolute;
+  top: 60px;
+  left: 0;
+  width: min(300px, 80vw);
+  box-shadow: 0 18px 40px #292c2733;
+}
+.ub-callout {
+  position: relative;
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  padding: 24px 26px;
+  border-left: 3px solid var(--orange);
+  background: color-mix(in srgb, var(--orange) 7%, var(--paper));
+}
+.ub-callout strong {
+  display: block;
+  font-size: 19px;
+  font-weight: 500;
+}
+.ub-callout p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.ub-quote {
+  margin: 0;
+  padding-left: 28px;
+  border-left: 1px solid var(--ink);
+}
+.ub-quote p {
+  margin: 0;
+  font: 400 clamp(22px, 2.2vw, 32px)/1.35 var(--font-display);
+  letter-spacing: -0.03em;
+}
+.ub-quote footer {
+  margin-top: 14px;
+  font: 12px var(--font-mono), monospace;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ub-divider {
+  width: 100%;
+  margin: 8px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.ub-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.ub-bar b {
+  margin-right: 6px;
+  font: 11px var(--font-mono), monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--orange);
+}
+.ub-bar button,
+.ub-bar select {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12px;
+}
+.ub-bar button.danger {
+  color: #a32b1f;
+}
+.ub-bar button:disabled {
+  opacity: 0.4;
+}
+.ub-insert {
+  position: relative;
+  margin-top: 10px;
+}
+.ub-insert > button {
+  padding: 4px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 100px;
+  background: none;
+  color: var(--muted);
+  font: 11px var(--font-mono), monospace;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+.ub-insert > button:hover,
+.ub-insert > button[aria-expanded="true"] {
+  border-color: var(--orange);
+  color: var(--orange);
+  opacity: 1;
+}
+.ub-menu {
+  position: absolute;
+  z-index: 12;
+  top: 34px;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(170px, 1fr));
+  gap: 4px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--ink);
+  box-shadow: 0 18px 40px #292c2759;
+}
+.ub-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: none;
+  color: var(--paper);
+  font-size: 13px;
+  text-align: left;
+}
+.ub-menu button:hover {
+  background: #f7f2e91a;
+}
+.ub-menu .ico {
+  width: 18px;
+  height: 18px;
+  color: #efa077;
+}
+.ub-add-item button {
+  padding: 8px 14px;
+  border: 1px dashed var(--line);
+  background: none;
+  color: var(--muted);
+}
+
+/* ======================================================================
+   Opening notice (holidays and the like)
+   ====================================================================== */
+.notice-overlay {
+  display: grid;
+  place-items: center;
+}
+.notice-card {
+  position: relative;
+  width: min(520px, calc(100vw - 32px));
+  padding: 40px 36px 32px;
+  background: var(--paper);
+  border-top: 4px solid var(--orange);
+  box-shadow: 0 30px 90px #292c2766;
+  animation: dialog-in 0.5s var(--ease-out) both;
+}
+.notice-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 20px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--orange) 12%, var(--paper));
+  color: var(--orange);
+}
+.notice-icon .ico {
+  width: 32px;
+  height: 32px;
+}
+.notice-card h2 {
+  margin: 12px 0 14px;
+  font: 500 clamp(30px, 4vw, 42px)/1.05 var(--font-display);
+  letter-spacing: -0.05em;
+}
+.notice-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  margin-top: 26px;
+}
+.notice-actions .btn-solid {
+  margin: 0;
+}
+.notice-wa {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.notice-wa .ico {
+  width: 20px;
+  height: 20px;
+  color: #25a755;
+}
+.notice-preview {
+  display: block;
+  margin-top: 16px;
+  color: var(--muted);
+}
+.notice-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.notice-presets button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  background: none;
+}
+.notice-presets button:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+.notice-presets .ico {
+  width: 18px;
+  height: 18px;
+}
+.notice-panel .icon-picker {
+  margin-top: 6px;
+}
+.notice-switch {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: flex-start !important;
+  align-items: center;
+  gap: 10px;
+}
+.notice-switch input {
+  flex: none;
+  width: 18px !important;
+  height: 18px;
+  accent-color: var(--orange);
+}
+@media (max-width: 700px) {
+  .ub-features li + li {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .ub-menu {
+    grid-template-columns: 1fr;
+  }
+  .notice-card {
+    padding: 32px 22px 24px;
+  }
+}
+/* An open block menu or icon picker must float over the next section. */
+.block:has(.ub-menu, .icon-picker) {
+  z-index: 30;
+}

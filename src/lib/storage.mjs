@@ -10,7 +10,7 @@ import { networkProblem } from "./net.mjs";
 import { isDemo } from "./runtime.mjs";
 import { SITE_ID, SUPABASE_DEFAULTS } from "./supabase-config.mjs";
 
-export const CONTENT_KEYS = ["company", "products", "sectors", "process", "services", "pillars", "copy", "styles", "layout"];
+export const CONTENT_KEYS = ["company", "products", "sectors", "process", "services", "pillars", "copy", "styles", "layout", "notice", "hidden"];
 const ROW_ID = "main";
 
 export { SITE_ID, SUPABASE_DEFAULTS };
