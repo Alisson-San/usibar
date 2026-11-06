@@ -17,9 +17,10 @@ import {
   type Part,
   type SaveState,
 } from "./editing";
-import { CopyContext, ImageSwap, T, type Field, type TextStyle } from "./copy";
+import { CopyContext, ImageSwap, Removable, T, type Field, type TextStyle } from "./copy";
 import { TextToolbar, type AiStatus } from "./assistant";
 import { ChatPanel, type ChatAction, type ChatSite } from "./chat";
+import { NoticeModal, NoticePanel, NoticeStrip, noticeDue } from "./notice";
 import { applyAction, COMPANY_FIELDS } from "@/lib/site-actions.mjs";
 import {
   BlockBar,
@@ -141,6 +142,8 @@ export default function UsibarHome() {
     [activeField, setActiveField] = useState<Field | null>(null),
     [aiStatus, setAiStatus] = useState<AiStatus>(null),
     [chatOpen, setChatOpen] = useState(false),
+    [noticeShown, setNoticeShown] = useState(false),
+    [noticeEdit, setNoticeEdit] = useState(false),
     [pickerAt, setPickerAt] = useState<number | null>(null),
     [waHello, setWaHello] = useState(false);
   const root = useRef<HTMLElement>(null),
@@ -157,6 +160,7 @@ export default function UsibarHome() {
     stale = useRef(""),
     fields = useRef(new Map<string, Field>()),
     uploaded = useRef(new WeakMap<File, Record<string, string>>()),
+    removables = useRef(new Map<string, string>()),
     loaded = !!content;
   const nav = content ? buildNav(content) : [];
   const navKey = nav.map((n) => n.id).join("|");
@@ -177,6 +181,8 @@ export default function UsibarHome() {
           pillars: d.pillars ?? [],
           copy: d.copy ?? {},
           styles: d.styles ?? {},
+          hidden: Array.isArray(d.hidden) ? d.hidden : [],
+          notice: d.notice,
           layout: Array.isArray(d.layout) && d.layout.length && d.layout.every((b: Block) => knownType(b?.type)) ? d.layout : defaultLayout(),
         };
         contentRef.current = savedRef.current = c;
@@ -293,6 +299,12 @@ export default function UsibarHome() {
     const t = setTimeout(() => setSave({ kind: "idle" }), 6000);
     return () => clearTimeout(t);
   }, [save]);
+  // The opening notice (holidays and the like) waits for the intro, and never interrupts editing.
+  useEffect(() => {
+    if (!content?.notice || editing || !noticeDue(content.notice)) return;
+    const t = setTimeout(() => setNoticeShown(true), 2600);
+    return () => clearTimeout(t);
+  }, [loaded, editing]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     document.documentElement.classList.toggle("chat-open", editing && chatOpen);
   }, [editing, chatOpen]);
@@ -630,6 +642,13 @@ export default function UsibarHome() {
       }),
     upload,
     fields,
+    hidden: content.hidden,
+    setHidden: (k: string, label: string, hide: boolean) =>
+      commit(hide ? `“${label}” removido` : `“${label}” recolocado`, (c) => {
+        const rest = c.hidden.filter((x) => x !== k);
+        return { ...c, hidden: hide ? [...rest, k] : rest };
+      }),
+    removables,
     active: activeField,
     activate: setActiveField,
   };
@@ -645,7 +664,17 @@ export default function UsibarHome() {
 
   // The editing chat: what it may know about the site, and how its actions are carried out.
   const chatSite: ChatSite = {
-    sections: layout.map((b) => ({ id: b.id, type: b.type, name: blockName(b).slice(0, 80), hidden: !!b.hidden })),
+    sections: layout.map((b) => ({
+      id: b.id,
+      type: b.type,
+      name: blockName(b).slice(0, 80),
+      hidden: !!b.hidden,
+      ...(b.type === "blocks"
+        ? { blocks: ((b.data?.blocks as { id: string; kind: string; text?: string; title?: string }[]) ?? []).map((x) => ({ id: x.id, kind: x.kind, text: String(x.text ?? x.title ?? "").slice(0, 200) })) }
+        : {}),
+    })),
+    removables: [...removables.current].map(([key, label]) => ({ key, label: label.slice(0, 120), hidden: content.hidden.includes(key) })),
+    notice: content.notice,
     products: products.map(({ id, code, title, category, featured }) => ({ id, code: code.slice(0, 40), title: title.slice(0, 200), category, featured })),
     company: Object.fromEntries(Object.keys(COMPANY_FIELDS).flatMap((k) => (typeof company[k] === "string" && company[k] ? [[k, company[k]]] : []))),
     socials: socialsOf(company).map(({ network, url }) => ({ network, url })),
@@ -668,6 +697,7 @@ export default function UsibarHome() {
     const wanted: [string, boolean][] = [];
     if (typeof args.image === "string") wanted.push([args.image, args.remove_background === true]);
     if (Array.isArray(args.photos)) for (const ph of args.photos as { image: string }[]) wanted.push([ph.image, false]);
+    if (Array.isArray(args.blocks)) for (const b of args.blocks as { image?: string }[]) if (b.image) wanted.push([b.image, false]);
     const urls = new Map<string, string>();
     for (const [id, removeBg] of wanted) {
       const file = files.get(id);
@@ -725,9 +755,11 @@ export default function UsibarHome() {
             </em>
           </h2>
         </div>
-        <p>
-          <T k="catalog.intro" d="Abra um modelo para ver detalhes, pedir cotação ou incluí-lo como referência no seu orçamento." label="Catálogo — introdução" />
-        </p>
+        <Removable k="catalog.intro" label="Catálogo — introdução" block>
+          <p>
+            <T k="catalog.intro" d="Abra um modelo para ver detalhes, pedir cotação ou incluí-lo como referência no seu orçamento." label="Catálogo — introdução" />
+          </p>
+        </Removable>
       </div>
       <div className="catalog-toolbar">
         <div className="catalog-tabs" role="group" aria-label="Filtrar por categoria">
@@ -1086,9 +1118,11 @@ export default function UsibarHome() {
         <section className="hero" id="inicio">
           <div className="hero-layout">
             <div className="hero-copy">
-              <span className="eyebrow hero-eyebrow">
-                <T k="hero.eyebrow" d="FABRICAÇÃO SOB MEDIDA" label="Topo — rótulo" /> · {text("city", "Cidade / UF")} — <T k="hero.country" d="BRASIL" label="Topo — país" />
-              </span>
+              <Removable k="hero.eyebrow" label="Topo — rótulo">
+                <span className="eyebrow hero-eyebrow">
+                  <T k="hero.eyebrow" d="FABRICAÇÃO SOB MEDIDA" label="Topo — rótulo" /> · {text("city", "Cidade / UF")} — <T k="hero.country" d="BRASIL" label="Topo — país" />
+                </span>
+              </Removable>
               <h1 className="hero-title">
                 <span>
                   <span className="line-inner">
@@ -1107,29 +1141,40 @@ export default function UsibarHome() {
                   </span>
                 </span>
               </h1>
-              <p className="hero-lead">{text("motto", "Lema da empresa")}</p>
-              <p className="hero-note">
-                {text("subheadline", "Subtítulo do topo")} <T k="hero.note" d="Envie o desenho técnico ou as especificações da sua aplicação." label="Topo — convite" />
-              </p>
+              <Removable k="hero.lead" label="Topo — lema" block>
+                <p className="hero-lead">{text("motto", "Lema da empresa")}</p>
+              </Removable>
+              <Removable k="hero.note" label="Topo — subtítulo e convite" block>
+                <p className="hero-note">
+                  {text("subheadline", "Subtítulo do topo")} <T k="hero.note" d="Envie o desenho técnico ou as especificações da sua aplicação." label="Topo — convite" />
+                </p>
+              </Removable>
               <div className="hero-actions">
-                <a href="#orcamento" className="btn-primary">
-                  <T k="hero.cta.1" d="Solicitar orçamento" label="Topo — botão principal" /> <Arrow />
-                </a>
-                <a href="#pecas" className="btn-ghost">
-                  <T k="hero.cta.2" d="Ver catálogo" label="Topo — botão secundário" /> <Arrow down />
-                </a>
+                <Removable k="hero.cta.1" label="Topo — botão principal">
+                  <a href="#orcamento" className="btn-primary">
+                    <T k="hero.cta.1" d="Solicitar orçamento" label="Topo — botão principal" /> <Arrow />
+                  </a>
+                </Removable>
+                <Removable k="hero.cta.2" label="Topo — botão secundário">
+                  <a href="#pecas" className="btn-ghost">
+                    <T k="hero.cta.2" d="Ver catálogo" label="Topo — botão secundário" /> <Arrow down />
+                  </a>
+                </Removable>
               </div>
             </div>
             <div className="hero-visual">
-              <span className="sheet-tag tiny-mono">
-                <T k="hero.sheet" d="FICHA / COMPONENTE 01 · CILINDRO COM OLHAL" label="Topo — etiqueta da foto" />
-              </span>
+              <Removable k="hero.sheet" label="Topo — etiqueta da foto">
+                <span className="sheet-tag tiny-mono">
+                  <T k="hero.sheet" d="FICHA / COMPONENTE 01 · CILINDRO COM OLHAL" label="Topo — etiqueta da foto" />
+                </span>
+              </Removable>
               <HeroArt src={heroImage} />
               <ImageSwap label="foto do topo" onChange={(url) => commit("Foto do topo trocada", (c) => ({ ...c, company: { ...c.company, heroImageUrl: url } }))} />
             </div>
           </div>
           <ProofBar company={company} ed={ed} />
         </section>
+        {content.notice && <NoticeStrip notice={content.notice} onOpen={() => (editing ? setNoticeEdit(true) : setNoticeShown(true))} />}
 
         {editing && (
           <button className="block-insert" onClick={() => setPickerAt(0)}>
@@ -1269,6 +1314,16 @@ export default function UsibarHome() {
         )}
         {editing && <ChatPanel open={chatOpen} ai={aiStatus} site={chatSite} run={runChatAction} show={showOnSite} onClose={() => setChatOpen(false)} />}
         {editing && <TextToolbar ai={aiStatus} />}
+        {noticeShown && !editing && content.notice && <NoticeModal notice={content.notice} whatsapp={company.whatsapp} lenis={lenisRef.current} onClose={() => setNoticeShown(false)} />}
+        {noticeEdit && (
+          <NoticePanel
+            notice={content.notice}
+            whatsapp={company.whatsapp}
+            lenis={lenisRef.current}
+            onClose={() => setNoticeEdit(false)}
+            onSave={(n) => commit(n.enabled ? "Aviso de abertura salvo" : "Aviso de abertura desligado", (c) => ({ ...c, notice: n }))}
+          />
+        )}
         {adminsOpen && <AdminsPanel lenis={lenisRef.current} onClose={() => setAdminsOpen(false)} />}
         {logged && (
           <EditBar
@@ -1285,6 +1340,8 @@ export default function UsibarHome() {
             }}
             onAdd={() => setEditorPart({ ...blankPart })}
             onCompany={() => setCompanyOpen(true)}
+            onNotice={() => setNoticeEdit(true)}
+            noticeOn={!!content.notice?.enabled}
             onCurate={() => setChatOpen((o) => !o)}
             onAdmins={accounts ? () => setAdminsOpen(true) : undefined}
             onLogout={async () => {

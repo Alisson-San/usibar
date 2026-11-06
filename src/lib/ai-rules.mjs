@@ -1,4 +1,4 @@
-import { BUILTIN_TYPES, CHAT_TOOLS, COMPANY_FIELDS, SOCIALS, TEMPLATE_TYPES, TYPE_NAMES } from "./site-actions.mjs";
+import { BLOCK_KINDS, BLOCK_NAMES, BUILTIN_TYPES, CHAT_TOOLS, COMPANY_FIELDS, ICON_NAMES, SOCIALS, TEMPLATE_TYPES, TYPE_NAMES } from "./site-actions.mjs";
 
 // Rules for the AI copy assistant that do not depend on the model client: what a request may
 // contain, and what of the model's answer may reach the editor. The assistant only proposes;
@@ -235,7 +235,18 @@ export function validateChatRequest(body) {
   const list = (v, max, check) => Array.isArray(v) && v.length <= max && v.every((x) => x && check(x));
   const types = [...BUILTIN_TYPES, ...TEMPLATE_TYPES];
   const ok =
-    list(site.sections, CHAT.sections, (b) => shortStr(b.id, 40) && types.includes(b.type) && shortStr(b.name, 80) && typeof b.hidden === "boolean") &&
+    list(
+      site.sections,
+      CHAT.sections,
+      (b) =>
+        shortStr(b.id, 40) &&
+        types.includes(b.type) &&
+        shortStr(b.name, 80) &&
+        typeof b.hidden === "boolean" &&
+        list(b.blocks ?? [], 40, (x) => shortStr(x.id, 16) && BLOCK_KINDS.includes(x.kind) && shortStr(x.text ?? "", 200)),
+    ) &&
+    list(site.removables ?? [], 200, (r) => shortStr(r.key, 80) && shortStr(r.label, 120) && typeof r.hidden === "boolean") &&
+    (site.notice === undefined || (typeof site.notice === "object" && JSON.stringify(site.notice).length <= 2000)) &&
     list(site.products, CHAT.products, (p) => shortStr(p.id, 80) && shortStr(p.code, 40) && shortStr(p.title, 200) && shortStr(p.category, 20) && typeof p.featured === "boolean") &&
     list(site.images, CHAT.targets, (i) => shortStr(i.target, 120) && shortStr(i.label, 120)) &&
     list(site.attachments, CHAT.attachments, (a) => /^foto-\d{1,2}$/.test(a.id) && shortStr(a.name, 120)) &&
@@ -255,6 +266,7 @@ export function siteState(site, texts) {
   site.sections.forEach((b, i) => {
     const kind = BUILTIN_TYPES.includes(b.type) ? "fixa" : `modelo ${TYPE_NAMES[b.type]}`;
     lines.push(`${i + 1}. [${b.id}] ${b.name} (${kind}${b.hidden ? ", oculta" : ""})`);
+    (b.blocks ?? []).forEach((x, j) => lines.push(`   bloco ${j + 1}. [${x.id}] ${BLOCK_NAMES[x.kind]}${x.text ? `: ${x.text}` : ""}`));
   });
   const missing = BUILTIN_TYPES.filter((t) => !site.sections.some((b) => b.type === t));
   if (missing.length) lines.push(`Seções fixas fora da página (podem ser recolocadas com add_section): ${missing.join(", ")}`);
@@ -263,6 +275,13 @@ export function siteState(site, texts) {
   lines.push("", "EMPRESA E CONTATO:");
   for (const [k, v] of Object.entries(site.company)) lines.push(`${k} (${COMPANY_FIELDS[k][0]}): ${v}`);
   if (site.socials?.length) lines.push(`Redes: ${site.socials.map((x) => `${x.network} ${x.url}`).join("; ")}`);
+  if (site.removables?.length) {
+    lines.push("", "ELEMENTOS DAS SEÇÕES FIXAS QUE PODEM SER REMOVIDOS OU RECOLOCADOS:");
+    for (const r of site.removables) lines.push(`[${r.key}] ${r.label}${r.hidden ? " (removido)" : ""}`);
+  }
+  const n = site.notice;
+  lines.push("", `AVISO AO ABRIR O SITE: ${n ? `${n.enabled ? "ligado" : "desligado"} — “${n.title}” de ${n.start} a ${n.end}: ${n.text}` : "nenhum configurado"}`);
+  lines.push(`Data de hoje: ${new Date().toISOString().slice(0, 10)}. Ícones disponíveis: ${ICON_NAMES.join(", ")}.`);
   lines.push("", "FOTOS QUE PODEM SER TROCADAS (alvo — onde fica):");
   for (const i of site.images) lines.push(`${i.target} — ${i.label}`);
   lines.push("", "FOTOS ANEXADAS NESTA CONVERSA:");
@@ -283,6 +302,8 @@ export function chatSystemPrompt(facts, state) {
     "- Foto anexada sem instrução: descreva em uma frase o que vê e ofereça opções (cadastrar como peça nova, trocar a foto do topo ou de uma peça, usar numa seção ou galeria).",
     "- Ao cadastrar uma peça pela foto: nome e descrição curtos a partir do que se vê; não invente medidas, pressões, materiais, normas ou aplicações. Sem código informado, proponha o próximo no padrão dos códigos existentes. Se o fundo da foto for poluído, use remove_background.",
     "- Para revisar todos os textos de uma vez, chame review_texts. Para mostrar algo, chame show_on_site.",
+    "- Para criar algo novo, insira uma seção livre (add_section com type blocks) combinando blocos; mantenha o tom sóbrio e industrial do site. Textos e botões das seções fixas podem ser removidos ou recolocados com set_element_visibility.",
+    "- Avisos como férias coletivas ou feriados: use set_notice com período, data de retorno e contato (WhatsApp/e-mail) no texto; datas no formato AAAA-MM-DD.",
     "- Você não altera senhas nem administradores, não muda o desenho do site além de cor e tamanho dos textos e não publica nada fora do site. Diga isso com gentileza quando pedirem.",
     "- Se o administrador perguntar o que você sabe fazer, dê exemplos práticos de pedidos.",
     "Textos:",

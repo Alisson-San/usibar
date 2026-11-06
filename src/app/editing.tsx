@@ -486,6 +486,8 @@ export function EditBar({
   hint,
   onHintClose,
   onCompany,
+  onNotice,
+  noticeOn,
   onAdmins,
   onAdd,
   onCurate,
@@ -500,6 +502,8 @@ export function EditBar({
   hint: boolean;
   onHintClose: () => void;
   onCompany: () => void;
+  onNotice: () => void;
+  noticeOn: boolean;
   onAdmins?: () => void;
   onAdd: () => void;
   onCurate: () => void;
@@ -525,7 +529,9 @@ export function EditBar({
             <li>Textos com contorno tracejado: clique e digite. Enter confirma, Esc cancela.</li>
             <li>Ao clicar num texto, uma barra permite mudar cor e tamanho e pedir sugestões à IA.</li>
             <li>“✦ Assistente IA” abre um chat: peça em palavras (mover seções, trocar fotos, cadastrar peças…) e aplique com um clique.</li>
-            <li>Cada seção tem controles para subir, descer, ocultar ou excluir; “+ Inserir seção” adiciona novas.</li>
+            <li>Cada seção tem controles para subir, descer, ocultar ou excluir; “+ Inserir seção” adiciona novas, inclusive a “Seção livre”, montada com blocos.</li>
+            <li>Textos e botões com “×” podem ser removidos e recolocados depois.</li>
+            <li>“Aviso” agenda uma mensagem ao abrir o site, como férias coletivas.</li>
             <li>Peças: clique no cartão para editar; “+ Nova peça” para cadastrar.</li>
             <li>Errou? Use “Desfazer” ou Ctrl+Z — vale também para exclusões.</li>
           </ul>
@@ -547,6 +553,9 @@ export function EditBar({
           </button>
           <button onClick={onAdd}>+ Nova peça</button>
           <button onClick={onCompany}>Empresa e contatos</button>
+          <button onClick={onNotice} title="Aviso que aparece ao abrir o site (férias, feriados…)">
+            Aviso{noticeOn ? " •" : ""}
+          </button>
           <button className="edit-ai" onClick={onCurate}>
             ✦ Assistente IA
           </button>

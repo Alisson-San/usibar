@@ -4,9 +4,81 @@
 // Pure module: shared by the API route (to accept the model's calls) and the browser (to apply them).
 
 export const BUILTIN_TYPES = ["solutions", "process", "catalog", "origin", "sectors", "quote"];
-export const TEMPLATE_TYPES = ["text-image", "stats", "gallery", "cta", "testimonial"];
+export const TEMPLATE_TYPES = ["blocks", "text-image", "stats", "gallery", "cta", "testimonial"];
+
+// ---- Shared vocabulary: icons, free blocks, the opening notice --------------------------------
+// Line icons drawn in the site's style (src/app/icons.tsx), usable in blocks and in the notice.
+export const ICON_NAMES = ["info", "alerta", "calendario", "ferias", "relogio", "feriado", "telefone", "whatsapp", "email", "local", "caminhao", "engrenagem", "ferramenta", "fabrica", "escudo", "check", "estrela", "raio", "pessoas", "documento"];
+// Blocks of a free section, WordPress style: each kind with its fields and limits.
+export const BLOCK_SPEC = {
+  label: { text: 80 },
+  heading: { text: 200, size: ["lg", "md"] },
+  text: { text: 2000 },
+  button: { text: 60, link: "link", style: ["solid", "ghost"] },
+  image: { url: "image", caption: 200 },
+  features: { items: "features" },
+  callout: { icon: "icon", title: 120, text: 600 },
+  quote: { text: 1200, author: 120 },
+  stats: { items: "stats" },
+  divider: {},
+};
+export const BLOCK_KINDS = Object.keys(BLOCK_SPEC);
+export const BLOCK_NAMES = { label: "Rótulo", heading: "Título", text: "Parágrafo", button: "Botão", image: "Foto", features: "Destaques com ícone", callout: "Chamada com ícone", quote: "Citação", stats: "Números", divider: "Divisória" };
+const okText = (v, max) => typeof v === "string" && v.trim().length > 0 && v.length <= max;
+const okOpt = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
+export const validLink = (v) => v === "#orcamento" || v === "#pecas" || v === "whatsapp" || (typeof v === "string" && v.length <= 300 && /^https:\/\/[^\s"'<>]+$/.test(v));
+/** @param {any} b @param {(v: any) => boolean} image */
+export function validBlock(b, image) {
+  const spec = b && BLOCK_SPEC[b.kind];
+  if (!spec || typeof b.id !== "string" || !/^[a-z0-9]{1,16}$/.test(b.id)) return false;
+  for (const [k, v] of Object.entries(b)) {
+    if (k === "id" || k === "kind") continue;
+    const rule = spec[k];
+    if (!rule) return false;
+    if (Array.isArray(rule) ? !rule.includes(v) : rule === "image" ? !image(v) : rule === "link" ? !validLink(v) : rule === "icon" ? !ICON_NAMES.includes(v) : false) return false;
+    if (rule === "features" && !(Array.isArray(v) && v.length >= 1 && v.length <= 6 && v.every((it) => it && ICON_NAMES.includes(it.icon) && okText(it.title, 80) && okOpt(it.text, 300) && Object.keys(it).every((x) => ["icon", "title", "text"].includes(x)))))
+      return false;
+    if (rule === "stats" && !(Array.isArray(v) && v.length >= 1 && v.length <= 6 && v.every((it) => it && okText(it.value, 40) && okText(it.label, 200) && Object.keys(it).length === 2))) return false;
+    if (typeof rule === "number" && !okOpt(v, rule)) return false;
+  }
+  // The fields a block cannot do without.
+  if (["label", "heading", "text", "quote"].includes(b.kind) && !okText(b.text, spec.text)) return false;
+  if (b.kind === "button" && !(okText(b.text, 60) && validLink(b.link))) return false;
+  if (b.kind === "image" && !image(b.url)) return false;
+  if (["features", "stats"].includes(b.kind) && !b.items) return false;
+  if (b.kind === "callout" && !(okText(b.title, 120) && ICON_NAMES.includes(b.icon))) return false;
+  return true;
+}
+export function validBlocks(list, image) {
+  if (!Array.isArray(list) || list.length > 40) return false;
+  return new Set(list.map((b) => b?.id)).size === list.length && list.every((b) => validBlock(b, image));
+}
+// Opening notice (e.g. collective holidays): shown between two dates, once per version per visitor.
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+export function validNotice(n) {
+  return (
+    !!n &&
+    typeof n === "object" &&
+    Object.keys(n).every((k) => ["enabled", "icon", "title", "text", "start", "end", "button", "version"].includes(k)) &&
+    typeof n.enabled === "boolean" &&
+    ICON_NAMES.includes(n.icon) &&
+    okText(n.title, 120) &&
+    okText(n.text, 1000) &&
+    DAY.test(n.start) &&
+    DAY.test(n.end) &&
+    n.start <= n.end &&
+    okOpt(n.button, 40) &&
+    typeof n.version === "string" &&
+    /^[a-z0-9-]{1,40}$/i.test(n.version)
+  );
+}
+/** True when the notice should be shown on `today` (YYYY-MM-DD, the visitor's local date). */
+export const noticeActive = (n, today) => !!n?.enabled && today >= n.start && today <= n.end;
+// Texts and buttons of the fixed sections the admin removed (they come back with "Recolocar").
+export const validHidden = (h) => Array.isArray(h) && h.length <= 200 && h.every((k) => typeof k === "string" && /^[a-z0-9][a-z0-9._-]{0,79}$/i.test(k));
 // Fields allowed in each template section and their limits; anything else is refused.
 export const TEMPLATE_FIELDS = {
+  blocks: { nav: 40, blocks: "blocks" },
   "text-image": { nav: 40, eyebrow: 80, title: 160, accent: 160, text: 1500, cta: 60, side: 5, imageUrl: "image" },
   stats: { nav: 40, eyebrow: 80, title: 160, items: "items" },
   gallery: { nav: 40, eyebrow: 80, title: 160, images: "images" },
@@ -41,6 +113,23 @@ const s = (description, extra = {}) => ({ type: STR, description, ...extra });
 const obj = (properties, required = []) => ({ type: "OBJECT", properties, ...(required.length ? { required } : {}) });
 const SECTION = s("O id da seção, exatamente como aparece em SEÇÕES.");
 const IMAGE = s("O id de uma foto anexada nesta conversa (ex.: foto-1).");
+const BLOCK_PROPS = {
+  kind: s("Tipo do bloco: label (rótulo), heading (título), text (parágrafo), button (botão), image (foto), features (destaques com ícone), callout (chamada com ícone), quote (citação), stats (números), divider (divisória).", { enum: BLOCK_KINDS }),
+  text: s("Texto do rótulo, título, parágrafo, botão, chamada ou citação."),
+  title: s("Título da chamada com ícone."),
+  author: s("Autor da citação."),
+  size: s("Tamanho do título.", { enum: ["lg", "md"] }),
+  link: s("Destino do botão: #orcamento, #pecas, whatsapp ou um link https://."),
+  style: s("Estilo do botão.", { enum: ["solid", "ghost"] }),
+  icon: s("Ícone da chamada.", { enum: ICON_NAMES }),
+  image: IMAGE,
+  caption: s("Legenda da foto."),
+  items: {
+    type: "ARRAY",
+    description: "Itens de destaques (icon, title, text) ou de números (value, label), até 6.",
+    items: obj({ icon: s("Ícone.", { enum: ICON_NAMES }), title: s("Título"), text: s("Texto"), value: s("Número"), label: s("Legenda") }),
+  },
+};
 const TEMPLATE_PROPS = {
   nav: s("Nome curto da seção no menu (até 40 caracteres)."),
   eyebrow: s("Rótulo pequeno acima do título."),
@@ -63,6 +152,11 @@ const TEMPLATE_PROPS = {
     type: "ARRAY",
     description: "Fotos da galeria (só ao inserir uma galeria nova).",
     items: obj({ image: IMAGE, caption: s("Legenda") }, ["image"]),
+  },
+  blocks: {
+    type: "ARRAY",
+    description: "Blocos de uma seção livre (type blocks), na ordem, só ao inserir. Monte algo criativo combinando os tipos.",
+    items: obj(BLOCK_PROPS, ["kind"]),
   },
 };
 const PRODUCT_PROPS = {
@@ -114,7 +208,7 @@ export const CHAT_TOOLS = [
   {
     name: "add_section",
     description:
-      "Insere uma seção. Modelos: text-image (texto com foto), stats (números), gallery (galeria), cta (chamada para contato), testimonial (depoimento). Também recoloca uma seção fixa removida (solutions, process, catalog, origin, sectors, quote). Campos omitidos usam o texto padrão do modelo.",
+      "Insere uma seção. Modelos: blocks (seção livre, montada com blocos: rótulo, título, parágrafo, botão, foto, destaques com ícone, chamada com ícone, citação, números, divisória — use para criar algo novo), text-image (texto com foto), stats (números), gallery (galeria), cta (chamada para contato), testimonial (depoimento). Também recoloca uma seção fixa removida (solutions, process, catalog, origin, sectors, quote). Campos omitidos usam o texto padrão do modelo.",
     parameters: obj(
       {
         type: s("Tipo da seção.", { enum: [...TEMPLATE_TYPES, ...BUILTIN_TYPES] }),
@@ -172,6 +266,47 @@ export const CHAT_TOOLS = [
     name: "set_social",
     description: "Define o link de uma rede social (com https://). Link vazio remove a rede.",
     parameters: obj({ network: s("Rede.", { enum: SOCIALS }), url: s("Link completo com https://, ou vazio para remover.") }, ["network", "url"]),
+  },
+  {
+    name: "add_block",
+    description: "Insere um bloco numa seção livre (type blocks) existente.",
+    parameters: obj({ section: SECTION, position: { type: "INTEGER", description: "Posição do bloco, contando de 1. Omitida: no fim." }, ...BLOCK_PROPS }, ["section", "kind"]),
+  },
+  {
+    name: "update_block",
+    description: "Altera um bloco de uma seção livre. Envie só os campos que mudam.",
+    parameters: obj({ section: SECTION, block: s("O id do bloco, como em SEÇÕES."), ...BLOCK_PROPS }, ["section", "block"]),
+  },
+  {
+    name: "remove_block",
+    description: "Remove um bloco de uma seção livre.",
+    parameters: obj({ section: SECTION, block: s("O id do bloco.") }, ["section", "block"]),
+  },
+  {
+    name: "move_block",
+    description: "Muda a posição de um bloco dentro da seção livre.",
+    parameters: obj({ section: SECTION, block: s("O id do bloco."), position: { type: "INTEGER", description: "Nova posição, contando de 1." } }, ["section", "block", "position"]),
+  },
+  {
+    name: "set_element_visibility",
+    description: "Remove (oculta) ou recoloca um texto ou botão das seções fixas. Os elementos possíveis estão em ELEMENTOS.",
+    parameters: obj({ key: s("Chave do elemento, como em ELEMENTOS."), visible: { type: "BOOLEAN", description: "false remove, true recoloca." } }, ["key", "visible"]),
+  },
+  {
+    name: "set_notice",
+    description: "Configura o aviso que aparece ao abrir o site (ex.: férias coletivas, feriado, horário especial), mostrado entre duas datas, uma vez para cada visitante.",
+    parameters: obj(
+      {
+        enabled: { type: "BOOLEAN", description: "Ligar ou desligar o aviso." },
+        icon: s("Ícone.", { enum: ICON_NAMES }),
+        title: s("Título curto."),
+        text: s("Mensagem: período, retorno do atendimento e como falar com a empresa."),
+        start: s("Primeiro dia em que aparece (AAAA-MM-DD)."),
+        end: s("Último dia em que aparece (AAAA-MM-DD)."),
+        button: s("Texto do botão de fechar (opcional)."),
+      },
+      ["enabled"],
+    ),
   },
   {
     name: "review_texts",
@@ -245,6 +380,44 @@ export function acceptActions(calls, site, texts) {
     return data;
   }
 
+  function blockArgs(a, creating) {
+    const kind = creating ? a.kind : a._kind;
+    const spec = BLOCK_SPEC[kind];
+    if (!spec) return null;
+    const out = creating ? { kind } : {};
+    for (const [k, rule] of Object.entries(spec)) {
+      if (typeof rule === "number") {
+        const v = clip(a[k], rule);
+        if (v) out[k] = v;
+      } else if (Array.isArray(rule) && rule.includes(a[k])) out[k] = a[k];
+      else if (rule === "link" && validLink(typeof a.link === "string" ? a.link.trim() : "")) out.link = a.link.trim();
+      else if (rule === "icon" && ICON_NAMES.includes(a.icon)) out.icon = a.icon;
+      else if (rule === "image" && image(a.image)) out.image = a.image;
+      else if ((rule === "features" || rule === "stats") && Array.isArray(a.items)) {
+        const items = a.items
+          .map((it) =>
+            rule === "features"
+              ? it && ICON_NAMES.includes(it.icon) && clip(it.title, 80) && { icon: it.icon, title: clip(it.title, 80), ...(clip(it.text, 300) ? { text: clip(it.text, 300) } : {}) }
+              : it && clip(it.value, 40) && clip(it.label, 200) && { value: clip(it.value, 40), label: clip(it.label, 200) },
+          )
+          .filter(Boolean)
+          .slice(0, 6);
+        if (items.length) out.items = items;
+      }
+    }
+    if (!creating) return Object.keys(out).length ? out : null;
+    // Defaults that make a new block valid on its own.
+    if (["label", "heading", "text", "quote"].includes(kind) && !out.text) return null;
+    if (kind === "button") Object.assign(out, { text: out.text ?? "Solicitar orçamento", link: out.link ?? "#orcamento" });
+    if (kind === "image" && !out.image) return null;
+    if (kind === "callout") Object.assign(out, { icon: out.icon ?? "info", title: out.title ?? out.text ?? "Aviso" });
+    if ((kind === "features" || kind === "stats") && !out.items) return null;
+    return out;
+  }
+  function blocksOf(id) {
+    return sections.get(id)?.blocks ?? [];
+  }
+
   function productArgs(a) {
     const out = {};
     for (const k of ["title", "code", "specs", "description"]) {
@@ -285,6 +458,10 @@ export function acceptActions(calls, site, texts) {
           if (sections.has(a.type)) return null; // already on the page
         } else if (!TEMPLATE_TYPES.includes(a.type)) return null;
         const out = { type: a.type, ...templateArgs(a.type, a, true) };
+        if (a.type === "blocks") {
+          const list = (Array.isArray(a.blocks) ? a.blocks : []).map((b) => b && blockArgs(b, true)).filter(Boolean).slice(0, 40);
+          if (list.length) out.blocks = list;
+        }
         const position = Math.round(Number(a.position));
         if (position >= 1) out.position = Math.min(position, site.sections.length + 1);
         if (a.visible === true) out.visible = true;
@@ -339,6 +516,39 @@ export function acceptActions(calls, site, texts) {
         if (url && !(url.length <= 300 && /^https:\/\/[^\s"'<>]+$/.test(url))) return null;
         return { network: a.network, url };
       }
+      case "add_block": {
+        if (sections.get(a.section)?.type !== "blocks") return null;
+        const b = blockArgs(a, true);
+        if (!b) return null;
+        const position = Math.round(Number(a.position));
+        return { section: a.section, ...(position >= 1 ? { position } : {}), ...b };
+      }
+      case "update_block": {
+        const blk = blocksOf(a.section).find((x) => x.id === a.block);
+        if (!blk) return null;
+        const b = blockArgs({ ...a, _kind: blk.kind }, false);
+        return b ? { section: a.section, block: a.block, ...b } : null;
+      }
+      case "remove_block":
+        return blocksOf(a.section).some((x) => x.id === a.block) ? { section: a.section, block: a.block } : null;
+      case "move_block": {
+        const position = Math.round(Number(a.position));
+        return blocksOf(a.section).some((x) => x.id === a.block) && position >= 1 ? { section: a.section, block: a.block, position } : null;
+      }
+      case "set_element_visibility":
+        return (site.removables ?? []).some((r) => r.key === a.key) && typeof a.visible === "boolean" ? { key: a.key, visible: a.visible } : null;
+      case "set_notice": {
+        if (typeof a.enabled !== "boolean") return null;
+        const out = { enabled: a.enabled };
+        if (ICON_NAMES.includes(a.icon)) out.icon = a.icon;
+        for (const [k, max] of [["title", 120], ["text", 1000], ["button", 40]]) {
+          const v = clip(a[k], max);
+          if (v) out[k] = v;
+        }
+        for (const k of ["start", "end"]) if (typeof a[k] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a[k])) out[k] = a[k];
+        if (out.start && out.end && out.start > out.end) return null;
+        return out;
+      }
       case "review_texts":
         return {};
       case "show_on_site":
@@ -366,6 +576,7 @@ export const TYPE_NAMES = {
   origin: "Empresa",
   sectors: "Segmentos",
   quote: "Orçamento",
+  blocks: "Seção livre",
   "text-image": "Texto com foto",
   stats: "Números",
   gallery: "Galeria de fotos",
@@ -375,6 +586,10 @@ export const TYPE_NAMES = {
 
 /** One line, in Portuguese, saying what an action will do. */
 export function describeAction({ name, args: a }, site, texts) {
+  const blockLabel = (x) => {
+    const b = site.sections.find((y) => y.id === x.section)?.blocks?.find((y) => y.id === x.block);
+    return b ? ` (${BLOCK_NAMES[b.kind]}${b.text ? `: ${quoted(b.text, 30)}` : ""})` : "";
+  };
   const section = (id) => quoted(site.sections.find((b) => b.id === id)?.name ?? id, 40);
   const text = (key) => quoted(texts.find((t) => t.key === key)?.label ?? key, 50);
   const product = (id) => quoted(site.products.find((p) => p.id === id)?.title ?? id, 50);
@@ -414,6 +629,22 @@ export function describeAction({ name, args: a }, site, texts) {
       return `Atualizar dados da empresa: ${fieldList(a, Object.fromEntries(Object.entries(COMPANY_FIELDS).map(([k, [l]]) => [k, l.toLowerCase()])))}`;
     case "set_social":
       return a.url ? `${NETWORK_LABELS[a.network]}: ${a.url}` : `Remover o ${NETWORK_LABELS[a.network]}`;
+    case "add_block":
+      return `Inserir o bloco ${BLOCK_NAMES[a.kind]} na seção ${section(a.section)}${a.position ? ` (posição ${a.position})` : ""}${a.text ? `: ${quoted(a.text, 40)}` : ""}`;
+    case "update_block":
+      return `Alterar um bloco da seção ${section(a.section)}${a.text ? `: ${quoted(a.text, 40)}` : ""}`;
+    case "remove_block":
+      return `Remover um bloco da seção ${section(a.section)}${blockLabel(a)}`;
+    case "move_block":
+      return `Mover um bloco da seção ${section(a.section)} para a posição ${a.position}${blockLabel(a)}`;
+    case "set_element_visibility": {
+      const r = (site.removables ?? []).find((x) => x.key === a.key);
+      return `${a.visible ? "Recolocar" : "Remover"} ${quoted(r?.label ?? a.key, 50)}`;
+    }
+    case "set_notice":
+      return a.enabled
+        ? `Aviso ao abrir o site${a.title ? `: ${quoted(a.title, 40)}` : ""}${a.start && a.end ? `, de ${br(a.start)} a ${br(a.end)}` : ""}`
+        : "Desligar o aviso ao abrir o site";
     case "review_texts":
       return "Revisar todos os textos da página";
     case "show_on_site":
@@ -422,6 +653,7 @@ export function describeAction({ name, args: a }, site, texts) {
       return name;
   }
 }
+const br = (d) => d.split("-").reverse().join("/");
 const omit = (o, k) => Object.fromEntries(Object.entries(o).filter(([x]) => x !== k));
 
 /**
@@ -446,6 +678,7 @@ export function applyAction(c, { name, args: a }, ctx) {
     for (const [k, v] of Object.entries(a)) {
       if (k === "image") d.imageUrl = photo(v);
       else if (k === "photos") d.images = v.map((p) => ({ url: photo(p.image), caption: p.caption || "Legenda da foto" }));
+      else if (k === "blocks") d.blocks = v.map(({ image, ...b }) => ({ id: ctx.newId(), ...b, ...(image ? { url: photo(image) } : {}) }));
       else if (TEMPLATE_FIELDS[type][k]) d[k] = v;
     }
     return d;
@@ -557,6 +790,41 @@ export function applyAction(c, { name, args: a }, ctx) {
     }
     case "update_company":
       return { content: { ...c, company: { ...c.company, ...a } }, label: "Dados da empresa alterados" };
+    case "add_block":
+    case "update_block":
+    case "remove_block":
+    case "move_block": {
+      const b = findSection(a.section);
+      if (b.type !== "blocks") fail("Essa seção não é uma seção livre.");
+      const list = [...(b.data?.blocks ?? [])];
+      const at = list.findIndex((x) => x.id === a.block);
+      if (name !== "add_block" && at < 0) fail("Esse bloco não existe mais.");
+      const { section, block, position, image, ...fields } = a;
+      const withImage = (x) => (image ? { ...x, url: photo(image) } : x);
+      if (name === "add_block") {
+        const nb = withImage({ id: ctx.newId(), ...fields });
+        const i = position ? Math.max(0, Math.min(list.length, position - 1)) : list.length;
+        list.splice(i, 0, nb);
+      } else if (name === "update_block") list[at] = withImage({ ...list[at], ...fields });
+      else if (name === "remove_block") list.splice(at, 1);
+      else {
+        const [x] = list.splice(at, 1);
+        list.splice(Math.max(0, Math.min(list.length, position - 1)), 0, x);
+      }
+      const labels = { add_block: "Bloco inserido", update_block: "Bloco alterado", remove_block: "Bloco removido", move_block: "Bloco movido" };
+      return { content: layout(c.layout.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, blocks: list } } : x))), label: `${labels[name]} em ${name_(b)}` };
+    }
+    case "set_element_visibility": {
+      const hidden = (c.hidden ?? []).filter((k) => k !== a.key);
+      return { content: { ...c, hidden: a.visible ? hidden : [...hidden, a.key] }, label: a.visible ? "Elemento recolocado" : "Elemento removido" };
+    }
+    case "set_notice": {
+      const today = new Date().toISOString().slice(0, 10);
+      const base = c.notice ?? { enabled: false, icon: "ferias", title: "Férias coletivas", text: "Estaremos em férias coletivas. Retornamos o atendimento em breve.", start: today, end: today };
+      const next = { ...base, ...a, version: ctx.newId() };
+      if (next.start > next.end) fail("A data final do aviso é anterior à inicial.");
+      return { content: { ...c, notice: next }, label: a.enabled ? "Aviso de abertura configurado" : "Aviso de abertura desligado" };
+    }
     case "set_social": {
       const current = Array.isArray(c.company.socials)
         ? c.company.socials

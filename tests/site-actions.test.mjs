@@ -117,3 +117,81 @@ test("template fields offered to the model are the ones the server allows", () =
   for (const spec of Object.values(TEMPLATE_FIELDS))
     for (const k of Object.keys(spec)) assert.ok(offered.includes(k === "imageUrl" ? "image" : k === "images" ? "photos" : k), k);
 });
+
+// ---- Free blocks, removable elements, opening notice ----------------------------------------
+import { noticeActive, validBlocks, validNotice } from "../src/lib/site-actions.mjs";
+const img = (v) => typeof v === "string" && v.startsWith("/assets/");
+
+test("blocks: each kind validated with its own fields", () => {
+  const ok = [
+    { id: "a1", kind: "label", text: "NOVIDADE" },
+    { id: "a2", kind: "heading", text: "Linha nova", size: "lg" },
+    { id: "a3", kind: "text", text: "Parágrafo." },
+    { id: "a4", kind: "button", text: "Fale conosco", link: "whatsapp", style: "ghost" },
+    { id: "a5", kind: "image", url: "/assets/hero-bench.webp", caption: "Bancada" },
+    { id: "a6", kind: "features", items: [{ icon: "engrenagem", title: "Precisão", text: "CNC" }] },
+    { id: "a7", kind: "callout", icon: "ferias", title: "Férias", text: "Voltamos dia 6." },
+    { id: "a8", kind: "quote", text: "Ótimo.", author: "Cliente" },
+    { id: "a9", kind: "stats", items: [{ value: "20+", label: "anos" }] },
+    { id: "b1", kind: "divider" },
+  ];
+  assert.equal(validBlocks(ok, img), true);
+  for (const bad of [
+    { id: "x", kind: "script", text: "x" },
+    { id: "x", kind: "button", text: "Ir", link: "javascript:alert(1)" },
+    { id: "x", kind: "image", url: "https://evil/x.png" },
+    { id: "x", kind: "callout", icon: "caveira", title: "x" },
+    { id: "x", kind: "heading", text: "x", onclick: "y" },
+    { id: "X Y", kind: "divider" },
+  ])
+    assert.equal(validBlocks([bad], img), false, JSON.stringify(bad));
+  assert.equal(validBlocks([ok[0], ok[0]], img), false, "duplicate ids");
+});
+
+test("notice: dates, icon and version checked; shown only inside its period", () => {
+  const n = { enabled: true, icon: "ferias", title: "Férias coletivas", text: "De 22/12 a 05/01.", start: "2026-12-20", end: "2027-01-05", version: "v1" };
+  assert.equal(validNotice(n), true);
+  assert.equal(validNotice({ ...n, end: "2026-12-01" }), false);
+  assert.equal(validNotice({ ...n, icon: "x" }), false);
+  assert.equal(validNotice({ ...n, extra: 1 }), false);
+  assert.equal(noticeActive(n, "2026-12-19"), false);
+  assert.equal(noticeActive(n, "2026-12-20"), true);
+  assert.equal(noticeActive(n, "2027-01-05"), true);
+  assert.equal(noticeActive({ ...n, enabled: false }, "2026-12-25"), false);
+  assert.equal(validData({ ...content, notice: n }), true);
+  assert.equal(validData({ ...content, notice: { ...n, text: "" } }), false);
+});
+
+test("assistant: free section with blocks, block edits, elements and notice stay valid", () => {
+  const free = { id: "livre1", type: "blocks", data: { nav: "Nova", blocks: [{ id: "h1", kind: "heading", text: "Olá" }, { id: "t1", kind: "text", text: "Texto" }] } };
+  const c2 = { ...content, layout: [...content.layout, free] };
+  const site2 = { ...site, sections: [...site.sections, { id: "livre1", type: "blocks", name: "Nova", hidden: false, blocks: [{ id: "h1", kind: "heading", text: "Olá" }, { id: "t1", kind: "text", text: "Texto" }] }], removables: [{ key: "hero.cta.2", label: "Topo — botão secundário", hidden: false }] };
+  const go = (c, name, args) => {
+    const act = acceptActions([{ name, args }], site2, texts).actions[0];
+    assert.ok(act, `${name} accepted`);
+    const r = applyAction(c, act, ctx);
+    assert.equal(validData(r.content), true, `${name} valid`);
+    assert.ok(describeAction(act, site2, texts).length > 5);
+    return r.content;
+  };
+  const created = go(content, "add_section", { type: "blocks", visible: true, blocks: [{ kind: "heading", text: "Linha agrícola" }, { kind: "features", items: [{ icon: "engrenagem", title: "Robustez" }] }, { kind: "button", text: "Pedir orçamento" }, { kind: "image", image: "foto-1" }] });
+  const sec = created.layout.at(-1);
+  assert.deepEqual(sec.data.blocks.map((b) => b.kind), ["heading", "features", "button", "image"]);
+  assert.equal(sec.data.blocks[2].link, "#orcamento");
+  let c = go(c2, "add_block", { section: "livre1", kind: "callout", icon: "ferias", title: "Férias", position: 1 });
+  assert.equal(c.layout.at(-1).data.blocks[0].kind, "callout");
+  c = go(c2, "update_block", { section: "livre1", block: "t1", text: "Novo texto" });
+  assert.equal(c.layout.at(-1).data.blocks[1].text, "Novo texto");
+  c = go(c2, "move_block", { section: "livre1", block: "t1", position: 1 });
+  assert.equal(c.layout.at(-1).data.blocks[0].id, "t1");
+  c = go(c2, "remove_block", { section: "livre1", block: "h1" });
+  assert.equal(c.layout.at(-1).data.blocks.length, 1);
+  c = go(content, "set_element_visibility", { key: "hero.cta.2", visible: false });
+  assert.deepEqual(c.hidden, ["hero.cta.2"]);
+  c = go(c, "set_element_visibility", { key: "hero.cta.2", visible: true });
+  assert.deepEqual(c.hidden, []);
+  c = go(content, "set_notice", { enabled: true, icon: "ferias", title: "Férias coletivas", text: "Retornamos em 05/01.", start: "2026-12-22", end: "2027-01-05" });
+  assert.equal(c.notice.end, "2027-01-05");
+  assert.equal(acceptActions([{ name: "set_notice", args: { enabled: true, start: "2027-01-05", end: "2026-12-22" } }], site2, texts).actions.length, 0);
+  assert.equal(acceptActions([{ name: "set_element_visibility", args: { key: "inventado", visible: false } }], site2, texts).actions.length, 0);
+});
