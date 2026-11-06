@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorize, sameOrigin } from "@/lib/auth";
 import { bundled, imageBase, readOnlyError, store } from "@/lib/content";
+import { networkProblem } from "@/lib/net.mjs";
 import { validData } from "@/lib/security.mjs";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,9 +13,10 @@ export async function GET() {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (e) {
-    console.error("[api/company] leitura do conteúdo falhou:", e);
+    const problem = networkProblem(e, "o Supabase");
+    console.error("[api/company] leitura do conteúdo falhou:", problem ? problem.message : e);
     return NextResponse.json(
-      { ...bundled, stale: true },
+      { ...bundled, stale: true, staleReason: problem?.kind ?? "error" },
       { headers: { "Cache-Control": "no-store", "X-Content-Source": "bundled-fallback" } },
     );
   }
@@ -27,10 +29,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
   const access = await authorize(req);
   if (!access.ok)
-    return NextResponse.json(
-      { error: "Sessão expirada. Entre novamente." },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: access.error }, { status: access.status });
   let body;
   try {
     const raw = await req.text();
@@ -51,10 +50,11 @@ export async function POST(req: Request) {
   } catch (e) {
     if ([401, 403].includes((e as { status?: number }).status ?? 0))
       return NextResponse.json({ error: "Sem permissão para salvar. Entre novamente." }, { status: 401 });
-    console.error("[api/company] gravação do conteúdo falhou:", e);
+    const problem = networkProblem(e, "o Supabase");
+    console.error("[api/company] gravação do conteúdo falhou:", problem ? problem.message : e);
     return NextResponse.json(
-      { error: "Não foi possível salvar os dados." },
-      { status: 502 },
+      { error: problem?.message ?? "Não foi possível salvar os dados." },
+      { status: problem ? 503 : 502 },
     );
   }
 }

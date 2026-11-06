@@ -313,6 +313,12 @@ export function sceneTimeline(
   { compact = false } = {},
 ): SceneTimeline {
   const q = gsap.utils.selector(root);
+  // The notes' word and letter spans exist only outside edit mode (editable texts stay whole).
+  // A stand-in keeps the timeline's timing identical without GSAP warning about empty targets.
+  const parts = (sel: string) => {
+    const found = q(sel);
+    return found.length ? found : [{}];
+  };
   const park = { x: 150, y: 48, z: H + 420 };
   const tool = { ...park };
   const spindle = q(".sc-spindle")[0];
@@ -329,8 +335,8 @@ export function sceneTimeline(
 
   gsap.set(q(".bp-draw, .tb-draw, .cyl-stroke-line"), { strokeDasharray: 1, strokeDashoffset: 1 });
   gsap.set(q(".bp-fade, .solid-face, .sc-cylinder, .cyl-labels, .cyl-stroke, .note"), { opacity: 0 });
-  gsap.set(q(".note .w > span"), { yPercent: 110 });
-  gsap.set(q(".note .t"), { opacity: 0 });
+  gsap.set(parts(".note .w > span"), { yPercent: 110 });
+  gsap.set(parts(".note .t"), { opacity: 0 });
   gsap.set(q(".sc-hole"), { scale: 0, transformOrigin: "50% 50%", opacity: 0 });
   gsap.set(q(".sc-chip, .sc-spindle"), { opacity: 0 });
   gsap.set(q(".cyl-needle"), { rotation: -120, svgOrigin: "120 110" });
@@ -357,8 +363,8 @@ export function sceneTimeline(
     .to(q(".bp-fade"), { opacity: 1, duration: 0.35, stagger: 0.08 }, 0.6)
     .to(q(".tb-draw"), { strokeDashoffset: 0, duration: 0.6, stagger: 0.1, ease: "power2.inOut" }, 0.3)
     .to(q(".note-drawing"), { opacity: 1, duration: 0.2 }, 0.7)
-    .to(q(".note-drawing .w > span"), { yPercent: 0, duration: 0.45, stagger: 0.05, ease: "power3.out" }, 0.8)
-    .to(q(".note-drawing .t"), { opacity: 1, duration: 0.12, stagger: 0.025 }, 1.2)
+    .to(parts(".note-drawing .w > span"), { yPercent: 0, duration: 0.45, stagger: 0.05, ease: "power3.out" }, 0.8)
+    .to(parts(".note-drawing .t"), { opacity: 1, duration: 0.12, stagger: 0.025 }, 1.2)
     // 02 — the drawing becomes material; the CNC controller panel types the text.
     .to(q(".note-drawing, .sc-titleblock"), { opacity: 0, duration: 0.4 }, S1)
     .to(q(".solid-face"), { opacity: 1, duration: 0.5, stagger: 0.05, ease: "power1.inOut" }, S1)
@@ -366,8 +372,8 @@ export function sceneTimeline(
     .to(q(".sc-spindle"), { opacity: 1, duration: 0.3 }, S1 + 0.3)
     .to(q(".note-machine"), { opacity: 1, duration: 0.01 }, S1 + 0.2)
     .to(q(".note-machine"), { clipPath: "inset(0 0% 0 0)", duration: 0.5, ease: "power3.inOut" }, S1 + 0.2)
-    .to(q(".note-machine .w > span"), { yPercent: 0, duration: 0.4, stagger: 0.05, ease: "power3.out" }, S1 + 0.6)
-    .to(q(".note-machine .t"), { opacity: 1, duration: 0.05, stagger: 0.09, ease: "steps(1)" }, S1 + 1);
+    .to(parts(".note-machine .w > span"), { yPercent: 0, duration: 0.4, stagger: 0.05, ease: "power3.out" }, S1 + 0.6)
+    .to(parts(".note-machine .t"), { opacity: 1, duration: 0.05, stagger: 0.09, ease: "steps(1)" }, S1 + 1);
   let t = S1 + 0.6;
   holes.forEach((h, i) => {
     tl.to(tool, { x: h.x, y: h.y, z: H + 40, duration: 0.42, ease: "power2.inOut", onUpdate: syncTool }, t)
@@ -430,8 +436,8 @@ export function sceneTimeline(
     )
     .to(q(".note-force"), { opacity: 1, duration: 0.01 }, S2 + 1.2)
     .fromTo(q(".note-force .push"), { x: compact ? -24 : -70 }, { x: 0, duration: 1.5, ease: "power2.inOut" }, S2 + 1.2)
-    .to(q(".note-force .w > span"), { yPercent: 0, duration: 0.5, stagger: 0.12, ease: "power3.out" }, S2 + 1.3)
-    .to(q(".note-force .t"), { opacity: 1, duration: 0.12, stagger: 0.03 }, S2 + 2)
+    .to(parts(".note-force .w > span"), { yPercent: 0, duration: 0.5, stagger: 0.12, ease: "power3.out" }, S2 + 1.3)
+    .to(parts(".note-force .t"), { opacity: 1, duration: 0.12, stagger: 0.03 }, S2 + 2)
     .to({}, { duration: 0.25 }, rests[2]);
   return { tl, starts, rests };
 }

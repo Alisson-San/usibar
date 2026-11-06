@@ -118,6 +118,8 @@ export function validData(data, { remoteBase = null } = {}) {
     )
   )
     return false;
+  if ("styles" in data && !validStyles(data.styles)) return false;
+  if ("layout" in data && !validLayout(data.layout, image)) return false;
   // Free texts of the page, keyed by place ("hero.title.1"); defaults live in the code.
   if (
     "copy" in data &&
@@ -174,4 +176,64 @@ export function validData(data, { remoteBase = null } = {}) {
 function unique(list) {
   const ids = new Set(list.map((x) => x?.id));
   return ids.size === list.length;
+}
+
+const KEY = /^[a-z0-9][a-z0-9._-]{0,79}$/i;
+// Per-text colour and size chosen in the editor: { "hero.title.1": { color: "#bf4f29", size: 1.2 } }.
+function validStyles(styles) {
+  if (!styles || typeof styles !== "object" || Array.isArray(styles)) return false;
+  const entries = Object.entries(styles);
+  return (
+    entries.length <= 600 &&
+    entries.every(
+      ([k, v]) =>
+        KEY.test(k) &&
+        v &&
+        typeof v === "object" &&
+        Object.keys(v).every((f) => f === "color" || f === "size") &&
+        (v.color === undefined || (typeof v.color === "string" && /^#[0-9a-f]{6}$/i.test(v.color))) &&
+        (v.size === undefined || (typeof v.size === "number" && v.size >= 0.5 && v.size <= 3)),
+    )
+  );
+}
+
+export const BUILTIN_SECTIONS = ["solutions", "process", "catalog", "origin", "sectors", "quote"];
+const opt = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
+// Fields allowed in each template section and their limits; anything else is refused.
+const TEMPLATE_FIELDS = {
+  "text-image": { nav: 40, eyebrow: 80, title: 160, accent: 160, text: 1500, cta: 60, side: 5, imageUrl: "image" },
+  stats: { nav: 40, eyebrow: 80, title: 160, items: "items" },
+  gallery: { nav: 40, eyebrow: 80, title: 160, images: "images" },
+  cta: { nav: 40, title: 160, text: 600, button: 60 },
+  testimonial: { nav: 40, quote: 1200, author: 120, role: 160 },
+};
+function validLayout(layout, image) {
+  if (!Array.isArray(layout) || layout.length > 30) return false;
+  const ids = new Set();
+  for (const b of layout) {
+    if (!b || typeof b.id !== "string" || !/^[a-z0-9-]{1,40}$/i.test(b.id) || ids.has(b.id)) return false;
+    ids.add(b.id);
+    if ("hidden" in b && typeof b.hidden !== "boolean") return false;
+    if (BUILTIN_SECTIONS.includes(b.type)) {
+      if (b.id !== b.type || "data" in b) return false;
+      continue;
+    }
+    const spec = TEMPLATE_FIELDS[b.type];
+    const d = b.data;
+    if (!spec || !d || typeof d !== "object" || Array.isArray(d)) return false;
+    for (const [k, v] of Object.entries(d)) {
+      const rule = spec[k];
+      if (!rule) return false;
+      if (rule === "image") {
+        if (!image(v)) return false;
+      } else if (rule === "items") {
+        if (!(Array.isArray(v) && v.length <= 6 && v.every((it) => it && text(it.value, 40) && text(it.label, 200)))) return false;
+      } else if (rule === "images") {
+        if (!(Array.isArray(v) && v.length <= 12 && v.every((it) => it && image(it.url) && opt(it.caption, 200)))) return false;
+      } else if (k === "side") {
+        if (v !== "left" && v !== "right") return false;
+      } else if (!opt(v, rule)) return false;
+    }
+  }
+  return true;
 }

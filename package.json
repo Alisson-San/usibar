@@ -5,6 +5,7 @@
   "scripts": {
     "assets": "node build-assets.mjs",
     "dev": "next dev --webpack --hostname 127.0.0.1",
+    "dev:empresa": "node --use-system-ca node_modules/next/dist/bin/next dev --webpack --hostname 127.0.0.1",
     "build": "next build --webpack",
     "start": "next start",
     "test": "node --test tests/*.test.mjs",

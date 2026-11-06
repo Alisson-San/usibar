@@ -6,10 +6,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { networkProblem } from "./net.mjs";
 import { isDemo } from "./runtime.mjs";
 import { SITE_ID, SUPABASE_DEFAULTS } from "./supabase-config.mjs";
 
-export const CONTENT_KEYS = ["company", "products", "sectors", "process", "services", "pillars", "copy"];
+export const CONTENT_KEYS = ["company", "products", "sectors", "process", "services", "pillars", "copy", "styles", "layout"];
 const ROW_ID = "main";
 
 export { SITE_ID, SUPABASE_DEFAULTS };
@@ -27,10 +28,13 @@ export const useLocalFiles = (env = process.env) =>
   env.USIBAR_STORAGE === "file" && env.VERCEL !== "1";
 
 // True when the bearer token belongs to an admin of this site (database decides, via RLS helper).
+// When the database cannot be asked at all (network, proxy certificate) it throws a 503 instead:
+// "could not check" must not read as "not an admin", or the editor would report an expired session.
 export async function isSiteAdmin(settings, token, fetchImpl = fetch) {
   if (typeof token !== "string" || token.length < 20 || token.length > 4096) return false;
+  let res;
   try {
-    const res = await fetchImpl(`${settings.url}/rest/v1/rpc/is_site_admin`, {
+    res = await fetchImpl(`${settings.url}/rest/v1/rpc/is_site_admin`, {
       method: "POST",
       headers: {
         apikey: settings.key,
@@ -40,10 +44,11 @@ export async function isSiteAdmin(settings, token, fetchImpl = fetch) {
       body: JSON.stringify({ p_site: SITE_ID }),
       cache: "no-store",
     });
-    return res.ok && (await res.json()) === true;
-  } catch {
-    return false;
+  } catch (e) {
+    const message = networkProblem(e, "o Supabase")?.message ?? "O servidor do site não conseguiu consultar o Supabase.";
+    throw Object.assign(Error(message), { status: 503, cause: e });
   }
+  return res.ok && (await res.json().catch(() => false)) === true;
 }
 
 // Public URL prefix of uploaded photos, so validation can accept them.
