@@ -325,6 +325,12 @@ export default function UsibarHome() {
       if (el) seen.observe(el);
     });
     let frame = 0;
+    // Tone of the page at a point, looking past the floating header, rail and WhatsApp button.
+    const toneAt = (x: number, y: number) =>
+      document
+        .elementsFromPoint(x, y)
+        .find((el) => !el.closest(".site-header, .cyl-nav, .wa-float"))
+        ?.closest<HTMLElement>("[data-tone]")?.dataset.tone;
     // The navigation rod reaches station i when section i is at the reading line.
     const rod = () => {
       frame = 0;
@@ -335,12 +341,19 @@ export default function UsibarHome() {
         const next = tops[i + 1] ?? document.body.scrollHeight;
         if (line >= tops[i]) p = i + Math.min(1, (line - tops[i]) / Math.max(1, next - tops[i]));
       }
+      // The floating logo takes its light version only while it is entirely over a dark area
+      // (light cards inside dark sections carry data-tone="light").
+      const brand = document.querySelector(".site-header .brand")?.getBoundingClientRect();
+      if (brand) {
+        const y = brand.top + brand.height / 2;
+        const dark = [0.15, 0.5, 0.85].every((f) => toneAt(brand.left + brand.width * f, y) === "dark");
+        document.querySelector(".site-header")?.classList.toggle("on-dark", dark);
+      }
       const rail = cylNav.current;
       if (!rail) return;
       rail.style.setProperty("--p", String(Math.min(1, p / Math.max(1, ids.length - 1))));
       // The rail switches to its light treatment over dark sections, so it never fights the text.
-      const under = document.elementFromPoint(innerWidth - 130, innerHeight / 2);
-      rail.classList.toggle("on-dark", !!under?.closest("[data-tone='dark']"));
+      rail.classList.toggle("on-dark", toneAt(innerWidth - 130, innerHeight / 2) === "dark");
     };
     rod();
     const onScroll = () => {

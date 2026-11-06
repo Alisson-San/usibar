@@ -15,7 +15,7 @@ export function LogoFull({ className, title = "Usibar — Tecnologia em hidrául
     <svg className={className} viewBox="18 2 480 166" role="img" aria-label={title}>
       <g className="lg-u">
         <path fillRule="evenodd" fill={LOGO_ORANGE} d={U} />
-        <path fill={LOGO_BLACK} d={DOT} />
+        <path className="lg-dot" fill={LOGO_BLACK} d={DOT} />
       </g>
       <path className="lg-cyl" fill={LOGO_BLACK} d={CYL} />
       <path className="lg-word" fillRule="evenodd" fill={LOGO_ORANGE} d={WORD} />

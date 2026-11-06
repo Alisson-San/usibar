@@ -509,7 +509,7 @@ export function QuoteBuilder({
       </div>
 
       <div className="quote-body">
-        <div className="wizard">
+        <div className="wizard" data-tone="light">
           <ol className="wizard-progress" aria-label="Etapas do orçamento">
             {labels.map((l, i) => {
               const done = i < last ? !!quote[steps[i].key] : false;
@@ -701,7 +701,7 @@ export function SiteFooter({ company, logged, onEdit, nav }: { company: Company;
   return (
     <footer className="site-footer" data-tone="dark">
       <div className="footer-brand">
-        <span className="footer-logo">
+        <span className="footer-logo" data-tone="light">
           <LogoFull />
         </span>
         <p>{company.motto ?? company.Tagline}</p>

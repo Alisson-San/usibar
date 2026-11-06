@@ -4145,16 +4145,49 @@ body {
   position: relative;
   z-index: 1;
 }
+/* Frosted glass behind the floating logo: the page shows through, blurred, so the logo reads
+   over photos and big titles without a solid card; a light top edge lifts it off the page. */
 .brand-plate {
   position: absolute;
   inset: -12px -16px -10px;
   z-index: -1;
-  border-radius: 6px;
-  background: var(--paper);
+  border-radius: 12px;
+  background-color: #f7f2e938;
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  backdrop-filter: blur(14px) saturate(1.6);
   box-shadow:
-    0 0 0 1px #292c271a,
-    0 14px 34px #292c2726;
+    inset 0 1px 0 #ffffffcc,
+    inset 0 0 0 1px #ffffff47,
+    0 14px 30px -14px #292c2740;
   opacity: 0;
+  transition:
+    background-color 0.4s,
+    box-shadow 0.4s;
+}
+.brand-plate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, #ffffff66, #ffffff00 58%);
+  transition: opacity 0.4s;
+}
+.brand-logo path {
+  transition: fill 0.4s;
+}
+/* Over dark sections the glass darkens and the logo's black parts turn light. */
+.docking .site-header.on-dark .brand-plate {
+  background-color: #1f221e3d;
+  box-shadow:
+    inset 0 1px 0 #ffffff4d,
+    inset 0 0 0 1px #ffffff1f,
+    0 14px 30px -14px #00000066;
+}
+.docking .site-header.on-dark .brand-plate::before {
+  opacity: 0.35;
+}
+.docking .site-header.on-dark .brand-logo :is(.lg-cyl, .lg-tag, .lg-dot) {
+  fill: var(--paper);
 }
 /* While docking, the header menu items are only slots: the index labels fly from them. */
 .docking .site-header .main-nav a {
