@@ -5003,3 +5003,39 @@ div.removed-slot {
 .block:has(.ub-menu, .icon-picker) {
   z-index: 30;
 }
+/* The notice, kept discreetly below the opening section during its period. */
+.notice-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 4%;
+  padding: 12px 18px;
+  border-left: 3px solid var(--orange);
+  background: color-mix(in srgb, var(--orange) 7%, var(--paper));
+  font-size: 14px;
+}
+.notice-strip .ico {
+  width: 20px;
+  height: 20px;
+  color: var(--orange);
+}
+.notice-strip strong {
+  font-weight: 500;
+}
+.notice-strip .tiny-mono {
+  color: var(--muted);
+}
+.notice-strip button {
+  margin-left: auto;
+  padding: 0;
+  background: none;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  font-size: 13px;
+}
+@media (min-width: 1100px) {
+  .notice-strip {
+    margin-right: calc(4% + 172px);
+  }
+}

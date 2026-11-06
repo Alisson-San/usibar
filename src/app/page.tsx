@@ -20,7 +20,7 @@ import {
 import { CopyContext, ImageSwap, Removable, T, type Field, type TextStyle } from "./copy";
 import { TextToolbar, type AiStatus } from "./assistant";
 import { ChatPanel, type ChatAction, type ChatSite } from "./chat";
-import { NoticeModal, NoticePanel, noticeDue } from "./notice";
+import { NoticeModal, NoticePanel, NoticeStrip, noticeDue } from "./notice";
 import { applyAction, COMPANY_FIELDS } from "@/lib/site-actions.mjs";
 import {
   BlockBar,
@@ -1174,6 +1174,7 @@ export default function UsibarHome() {
           </div>
           <ProofBar company={company} ed={ed} />
         </section>
+        {content.notice && <NoticeStrip notice={content.notice} onOpen={() => (editing ? setNoticeEdit(true) : setNoticeShown(true))} />}
 
         {editing && (
           <button className="block-insert" onClick={() => setPickerAt(0)}>

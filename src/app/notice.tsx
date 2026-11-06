@@ -55,6 +55,25 @@ export function NoticeModal({ notice, whatsapp, lenis, preview = false, onClose 
   );
 }
 
+/* While the notice is in force it stays on the page as a slim strip below the opening section,
+   so a visitor who closed it (or skipped past) can still find it. */
+export function NoticeStrip({ notice, onOpen }: { notice: Notice; onOpen: () => void }) {
+  if (!noticeActive(notice, today())) return null;
+  return (
+    <aside className="notice-strip" aria-label="Aviso">
+      <Icon name={notice.icon} />
+      <strong>{notice.title}</strong>
+      <span className="tiny-mono">
+        {br(notice.start)}
+        {notice.end !== notice.start && ` – ${br(notice.end)}`}
+      </span>
+      <button type="button" onClick={onOpen}>
+        Ler aviso ↗
+      </button>
+    </aside>
+  );
+}
+
 const year = new Date().getFullYear();
 const PRESETS: [string, Omit<Notice, "enabled" | "version">][] = [
   [
