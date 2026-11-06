@@ -4274,3 +4274,19 @@ body {
     border-top: 1px solid var(--line);
   }
 }
+/* Phones and touch screens: icon only. The label (and the hover that would stick open) stays off. */
+@media (max-width: 700px), (hover: none) {
+  .wa-float,
+  .wa-float:hover,
+  .wa-float.hello {
+    gap: 0;
+    width: 56px;
+    min-width: 56px;
+    padding: 0;
+    justify-content: center;
+    transform: none;
+  }
+  .wa-float > span {
+    display: none;
+  }
+}
