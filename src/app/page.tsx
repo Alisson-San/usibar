@@ -32,7 +32,7 @@ import {
   TemplateSection,
   type Block,
 } from "./blocks";
-import { LogoFull, LogoMark } from "./logo";
+import { LogoFull } from "./logo";
 import {
   Arrow,
   ContactCard,
@@ -116,7 +116,6 @@ export default function UsibarHome() {
     [menu, setMenu] = useState(false),
     [zoom, setZoom] = useState(false),
     [section, setSection] = useState(""),
-    [headerHidden, setHeaderHidden] = useState(false),
     [quote, setQuote] = useState<Quote>(emptyQuote),
     [logged, setLogged] = useState(false),
     [storage, setStorage] = useState("file"),
@@ -132,7 +131,6 @@ export default function UsibarHome() {
     [aiStatus, setAiStatus] = useState<AiStatus>(null),
     [curationOpen, setCurationOpen] = useState(false),
     [pickerAt, setPickerAt] = useState<number | null>(null),
-    [railHello, setRailHello] = useState(false),
     [waHello, setWaHello] = useState(false);
   const root = useRef<HTMLElement>(null),
     dialog = useRef<HTMLDivElement>(null),
@@ -315,8 +313,7 @@ export default function UsibarHome() {
       const el = document.getElementById(id);
       if (el) seen.observe(el);
     });
-    let last = scrollY,
-      frame = 0;
+    let frame = 0;
     // The navigation rod reaches station i when section i is at the reading line.
     const rod = () => {
       frame = 0;
@@ -337,14 +334,6 @@ export default function UsibarHome() {
     rod();
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(rod);
-      const y = scrollY;
-      // On wide screens the menu docks into the cylinder instead (see the docking timeline).
-      if (innerWidth >= 1100) setHeaderHidden(false);
-      else {
-        setHeaderHidden(y > 240 && y > last + 4);
-        if (y < last - 4 || y < 240) setHeaderHidden(false);
-      }
-      last = y;
     };
     addEventListener("scroll", onScroll, { passive: true });
     return () => {
@@ -353,13 +342,6 @@ export default function UsibarHome() {
       cancelAnimationFrame(frame);
     };
   }, [loaded, navKey]);
-  // The symbol tells which section the reader reached, briefly, then gets out of the way.
-  useEffect(() => {
-    if (!section) return;
-    setRailHello(true);
-    const t = setTimeout(() => setRailHello(false), 1800);
-    return () => clearTimeout(t);
-  }, [section]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -385,7 +367,7 @@ export default function UsibarHome() {
             };
           };
           let f = { x: 0, y: 0, scale: 1 };
-          gsap.set(".site-header, .rail-mark", { opacity: 0 });
+          gsap.set(".site-header, .cyl-nav", { opacity: 0 });
           intro
             .from(".intro-logo", { opacity: 0, scale: 0.92, duration: 0.6, ease: "power3.out" })
             .to(
@@ -408,7 +390,7 @@ export default function UsibarHome() {
             })
             .to(".intro-logo", { x: () => f.x, y: () => f.y, scale: () => f.scale, duration: 1, ease: "expo.inOut" })
             .to(".intro-shutter", { backgroundColor: "rgba(238, 231, 220, 0)", duration: 0.7, ease: "power2.inOut" }, "<+.25")
-            .set(".site-header, .rail-mark", { opacity: 1 })
+            .set(".site-header, .cyl-nav", { opacity: 1 })
             .set(".intro-shutter", { display: "none" })
             .add(() => {
               setWaHello(true);
@@ -483,35 +465,46 @@ export default function UsibarHome() {
         };
       });
 
-      // Docking: as reading starts, the header menu folds away and the symbol of the logo flies
-      // from the header into the cylinder rail, where it then rides along the sections.
+      // Docking: as reading starts, each item of the header menu travels to its station on the
+      // cylinder at the side, which becomes the page index. The logo never leaves: it only settles
+      // into a smaller badge in the corner.
       mm.add("(min-width: 1100px) and (prefers-reduced-motion: no-preference)", () => {
         const r = root.current!;
-        const brandU = r.querySelector<SVGGElement>(".site-header .brand-logo .lg-u")!;
-        const disc = r.querySelector<HTMLElement>(".rail-mark .rail-disc")!;
-        const track = r.querySelector<HTMLElement>(".cyl-track")!;
-        const svg = disc.querySelector("svg")!;
-        gsap.set(brandU, { opacity: 0 }); // the rail symbol stands exactly where it was
-        gsap.set(".rail-fade", { opacity: 0 });
-        const vec = () => {
-          const a = brandU.getBoundingClientRect();
-          const t = track.getBoundingClientRect();
-          return {
-            x: a.left + a.width / 2 - (t.left + t.width / 2),
-            y: a.top + a.height / 2 - t.top,
-            s: a.height / parseFloat(getComputedStyle(svg).height),
-          };
+        r.classList.add("docking");
+        const labels = gsap.utils.toArray<HTMLElement>(".cyl-track .station-label", r);
+        // From the item's place in the header to its place beside the station (both unaffected
+        // by the transform being animated, so refreshes at any scroll position stay exact).
+        const from = (el: HTMLElement) => {
+          const btn = el.parentElement!;
+          const b = btn.getBoundingClientRect();
+          const rest = { x: b.left + el.offsetLeft + el.offsetWidth / 2, y: b.top + el.offsetTop + el.offsetHeight / 2 };
+          const slot = r.querySelector(`.main-nav a[data-slot="${btn.dataset.id}"]`);
+          if (!slot) return { x: 0, y: -30, o: 0 };
+          const s = slot.getBoundingClientRect();
+          return { x: s.left + s.width / 2 - rest.x, y: s.top + s.height / 2 - rest.y, o: 1 };
         };
+        gsap.set(".rail-fade", { opacity: 0 });
         const dock = gsap.timeline({
-          scrollTrigger: { start: 0, end: () => innerHeight * 0.6, scrub: 0.5, invalidateOnRefresh: true },
+          scrollTrigger: { start: 0, end: () => innerHeight * 0.55, scrub: 0.5, invalidateOnRefresh: true },
         });
+        labels.forEach((el, i) =>
+          dock.fromTo(
+            el,
+            { x: () => from(el).x, y: () => from(el).y, opacity: () => from(el).o },
+            { x: 0, y: 0, opacity: 1, duration: 0.7, ease: "power2.inOut" },
+            i * 0.05,
+          ),
+        );
         dock
-          .fromTo(disc, { x: () => vec().x, y: () => vec().y, scale: () => vec().s }, { x: 0, y: 0, scale: 1, ease: "power2.inOut", duration: 1 }, 0)
-          .fromTo(".rail-disc-bg", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.45 }, 0.45)
-          .to(".site-header .main-nav > a, .site-header .header-contact, .site-header .menu-toggle", { opacity: 0, x: 40, stagger: 0.04, duration: 0.35 }, 0)
-          .to(".site-header", { yPercent: -110, duration: 0.35, ease: "power2.in" }, 0.62)
-          .to(".rail-fade", { opacity: 1, duration: 0.4, stagger: 0.03 }, 0.5);
-        return () => dock.kill();
+          .to(".site-header .header-contact, .site-header .menu-toggle", { autoAlpha: 0, duration: 0.25 }, 0)
+          .to(".site-header .header-bg", { opacity: 0, duration: 0.4 }, 0.1)
+          .to(".site-header .brand", { scale: 0.82, transformOrigin: "0% 50%", duration: 0.6, ease: "power2.inOut" }, 0.2)
+          .to(".site-header .brand-plate", { opacity: 1, duration: 0.3 }, 0.1)
+          .to(".rail-fade", { opacity: 1, duration: 0.35, stagger: 0.02 }, 0.55);
+        return () => {
+          dock.kill();
+          r.classList.remove("docking");
+        };
       });
 
       mm.add("(min-width: 768px) and (prefers-reduced-motion: no-preference)", () => {
@@ -610,7 +603,6 @@ export default function UsibarHome() {
   };
   const heroImage = company.heroImageUrl || HERO_IMAGE;
   const footerNav = nav.map((n) => [`#${n.id}`, n.label] as [string, string]);
-  const current = nav.find((n) => n.id === section);
 
   // Section order, visibility and template sections.
   const setLayout = (label: string, change: (l: Block[]) => Block[]) => commit(label, (c) => ({ ...c, layout: change(c.layout) }));
@@ -889,8 +881,10 @@ export default function UsibarHome() {
           </div>
         </div>
 
-        <header className={"site-header" + (headerHidden && !menu ? " tucked" : "")}>
+        <header className="site-header">
+          <span className="header-bg" aria-hidden="true" />
           <a className="brand" href="#inicio" aria-label="Usibar, início">
+            <span className="brand-plate" aria-hidden="true" />
             <LogoFull className="brand-logo" />
           </a>
           <nav className="main-nav" aria-label="Navegação principal">
@@ -898,7 +892,7 @@ export default function UsibarHome() {
               .filter((n) => n.id !== "orcamento")
               .slice(0, 5)
               .map((n) => (
-                <a key={n.id} href={`#${n.id}`} aria-current={section === n.id ? "location" : undefined}>
+                <a key={n.id} href={`#${n.id}`} data-slot={n.id} aria-current={section === n.id ? "location" : undefined}>
                   <small>{n.n}</small>
                   {n.label}
                 </a>
@@ -914,37 +908,37 @@ export default function UsibarHome() {
           </button>
         </header>
 
-        {/* While reading, the menu docks into a hydraulic cylinder: the rod extends with the page and
-            the Usibar symbol rides at its end, from station to station. */}
-        <nav className="cyl-nav" ref={cylNav} aria-label="Seções da página">
+        {/* The page index, drawn as a hydraulic cylinder: on wide screens the header menu travels
+            here while reading, the rod extends to the current section and each station leads to one. */}
+        <nav className="cyl-nav" ref={cylNav} aria-label="Índice da página">
           <span className="cyl-barrel rail-fade" aria-hidden="true">
             <i />
           </span>
           <span className="cyl-track">
             <i className="cyl-line rail-fade" aria-hidden="true" />
             <i className="cyl-rod rail-fade" aria-hidden="true" />
+            <i className="cyl-eye rail-fade" aria-hidden="true" />
             {nav.map((n, i) => (
               <button
                 key={n.id}
+                data-id={n.id}
                 style={{ top: `${(i / Math.max(1, nav.length - 1)) * 100}%` }}
-                className={"station rail-fade" + (section === n.id ? " on" : "")}
+                className={"station" + (section === n.id ? " on" : "")}
                 aria-current={section === n.id ? "location" : undefined}
                 onClick={() => goTo(n.id)}
               >
-                <b>{n.n}</b>
-                <span>{n.label}</span>
+                <span className="station-label">
+                  <small>{n.n}</small>
+                  {n.label}
+                </span>
+                <i className="station-dot rail-fade" aria-hidden="true" />
               </button>
             ))}
-            <button className={"rail-mark" + (railHello ? " hello" : "")} onClick={() => setMenu(true)} aria-label={`${tx("header.index", "Índice")} — seção atual: ${current?.label ?? "início"}`}>
-              <span className="rail-disc">
-                <i className="rail-disc-bg" />
-                <LogoMark />
-              </span>
-              <span className="rail-now">
-                <small>{current?.n ?? "00"}</small> {current?.label ?? tx("header.index", "Índice")}
-              </span>
-            </button>
           </span>
+          <button className="rail-index rail-fade" onClick={() => setMenu(true)}>
+            <i aria-hidden="true" />
+            {tx("header.index", "Índice")}
+          </button>
         </nav>
 
         <a
