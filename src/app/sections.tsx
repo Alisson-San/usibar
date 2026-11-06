@@ -2,7 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Company, Part } from "./editing";
 import type { Step } from "./ProcessSection";
-import { ImageSwap, T, useEditing, useText } from "./copy";
+import { ImageSwap, T, useEditing, useText, type TextStyle } from "./copy";
+import type { Block } from "./blocks";
+import { LogoFull } from "./logo";
 
 export type Sector = { id: string; name: string; code: string };
 export type Service = {
@@ -23,9 +25,11 @@ export type Content = {
   services: Service[];
   pillars: Pillar[];
   copy: Record<string, string>;
+  styles: Record<string, TextStyle>;
+  layout: Block[];
 };
 // Renders a field as plain text, or as an inline editor while editing.
-export type Ed = (value: string, label: string, apply: (c: Content, v: string) => Content) => React.ReactNode;
+export type Ed = (value: string, label: string, apply: (c: Content, v: string) => Content, key?: string) => React.ReactNode;
 type Apply = (change: (c: Content) => Content, label: string) => void;
 
 export const HERO_IMAGE = "/assets/cilindro-olhal.webp";
@@ -193,11 +197,11 @@ export function HeroArt({ src }: { src: string }) {
 export function ProofBar({ company, ed }: { company: Company; ed: Ed }) {
   const items = [
     {
-      value: ed(company.experienceYears, "Anos de experiência", (c, v) => ({ ...c, company: { ...c.company, experienceYears: v } })),
+      value: ed(company.experienceYears, "Anos de experiência", (c, v) => ({ ...c, company: { ...c.company, experienceYears: v } }), "company.experienceYears"),
       label: <T k="proof.1" d="anos de experiência em soluções hidráulicas" label="Faixa de fatos 1" />,
     },
     {
-      value: ed(company.city, "Cidade / UF", (c, v) => ({ ...c, company: { ...c.company, city: v } })),
+      value: ed(company.city, "Cidade / UF", (c, v) => ({ ...c, company: { ...c.company, city: v } }), "company.city"),
       label: <T k="proof.2" d="nossa sede, no Rio Grande do Sul" label="Faixa de fatos 2" />,
     },
     { value: <T k="proof.3.value" d="Sob projeto" label="Faixa de fatos 3 — destaque" />, label: <T k="proof.3" d="cada peça segue as especificações da sua aplicação" label="Faixa de fatos 3" /> },
@@ -216,6 +220,7 @@ export function ProofBar({ company, ed }: { company: Company; ed: Ed }) {
 }
 
 export function Solutions({
+  num,
   services,
   products,
   ed,
@@ -223,6 +228,7 @@ export function Solutions({
   onBrowse,
   onQuote,
 }: {
+  num: string;
   services: Service[];
   products: Part[];
   ed: Ed;
@@ -238,7 +244,7 @@ export function Solutions({
     <section className="solutions" id="solucoes" aria-labelledby="solutions-title">
       <div className="section-intro reveal">
         <span className="eyebrow">
-          <T k="solutions.eyebrow" d="01 — SOLUÇÕES" label="Soluções — rótulo" />
+          {num} — <T k="solutions.eyebrow" d="SOLUÇÕES" label="Soluções — rótulo" />
         </span>
         <h2 id="solutions-title">
           <T k="solutions.title.1" d="Soluções hidráulicas" label="Soluções — título" />
@@ -272,9 +278,9 @@ export function Solutions({
                   }
                 />
               </div>
-              <h3>{ed(s.title, `Solução ${i + 1} — título`, setService(s.id, "title"))}</h3>
-              <p className="solution-lead">{ed(s.lead, `Solução ${i + 1} — destaque`, setService(s.id, "lead"))}</p>
-              <p>{ed(s.copy, `Solução ${i + 1} — texto`, setService(s.id, "copy"))}</p>
+              <h3>{ed(s.title, `Solução ${i + 1} — título`, setService(s.id, "title"), `service.${s.id}.title`)}</h3>
+              <p className="solution-lead">{ed(s.lead, `Solução ${i + 1} — destaque`, setService(s.id, "lead"), `service.${s.id}.lead`)}</p>
+              <p>{ed(s.copy, `Solução ${i + 1} — texto`, setService(s.id, "copy"), `service.${s.id}.copy`)}</p>
               <div className="solution-actions">
                 {count > 0 && (
                   <button onClick={() => onBrowse(s.category)}>
@@ -303,8 +309,8 @@ export function Pillars({ pillars, ed }: { pillars: Pillar[]; ed: Ed }) {
       {pillars.map((p, i) => (
         <li key={p.id} className="reveal">
           <span className="tiny-mono">{String(i + 1).padStart(2, "0")}</span>
-          <h3>{ed(p.title, `Pilar ${i + 1} — título`, set(p.id, "title"))}</h3>
-          <p>{ed(p.desc, `Pilar ${i + 1} — texto`, set(p.id, "desc"))}</p>
+          <h3>{ed(p.title, `Pilar ${i + 1} — título`, set(p.id, "title"), `pillar.${p.id}.title`)}</h3>
+          <p>{ed(p.desc, `Pilar ${i + 1} — texto`, set(p.id, "desc"), `pillar.${p.id}.desc`)}</p>
         </li>
       ))}
     </ul>
@@ -412,12 +418,14 @@ export function quoteMessage(q: Quote) {
 type Option = { value: string; hint?: string; icon?: React.ReactNode };
 
 export function QuoteBuilder({
+  num,
   company,
   sectors,
   services,
   quote,
   setQuote,
 }: {
+  num: string;
   company: Company;
   sectors: Sector[];
   services: Service[];
@@ -479,10 +487,10 @@ export function QuoteBuilder({
   const current = steps[step];
 
   return (
-    <section className="quote" id="orcamento" aria-labelledby="quote-title">
+    <section className="quote" id="orcamento" data-tone="dark" aria-labelledby="quote-title">
       <div className="quote-head">
         <span className="eyebrow">
-          <T k="quote.eyebrow" d="06 — ORÇAMENTO" label="Orçamento — rótulo" />
+          {num} — <T k="quote.eyebrow" d="ORÇAMENTO" label="Orçamento — rótulo" />
         </span>
         <h2 id="quote-title">
           <T k="quote.title.1" d="Seu orçamento" label="Orçamento — título" />
@@ -691,9 +699,11 @@ export function ContactCard({ company }: { company: Company }) {
 
 export function SiteFooter({ company, logged, onEdit, nav }: { company: Company; logged: boolean; onEdit: () => void; nav: [string, string][] }) {
   return (
-    <footer className="site-footer">
+    <footer className="site-footer" data-tone="dark">
       <div className="footer-brand">
-        <img src="/assets/logo-usibar-light.webp" alt="Usibar — Tecnologia em hidráulica" />
+        <span className="footer-logo">
+          <LogoFull />
+        </span>
         <p>{company.motto ?? company.Tagline}</p>
         <SocialLinks company={company} />
       </div>

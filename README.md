@@ -14,7 +14,7 @@ Visual bege, grafite e laranja, com textos tirados da apresentação institucion
 6. **Segmentos** — com ícones técnicos e o destaque em elevadores hidráulicos.
 7. **Orçamento em etapas** — uma pergunta por vez (produto, aplicação, quantidade, desenho), com cartões grandes, progresso, voltar e pular; na revisão o cliente confere tudo e envia pelo WhatsApp ou por e-mail. Ao lado, contato direto com ícones, endereço completo (Rua Martin Biancho, 803 — Bairro Bela Vista, Barão/RS, CEP 95730-000) e “como chegar”. Nada é armazenado.
 
-Navegação: as seções são folhas numeradas. À direita, um cilindro hidráulico vertical funciona como trilho de navegação: a haste avança conforme a leitura e cada estação leva à sua seção. O botão “Índice” abre um índice de folhas em tela cheia com os contatos. O cabeçalho indica a seção atual e se recolhe durante a leitura. Metadados de compartilhamento e dados estruturados (schema.org) usam os contatos reais. As animações e desenhos são ilustrativos; as fotografias preservam as peças, com resolução limitada aos originais.
+Logo e navegação: a abertura mostra a logo grande (vetorizada a partir do original em raw/image_14.jpg, nítida em qualquer tamanho) e ela voa para o cabeçalho, que usa a logo em tamanho maior. Em telas largas, ao começar a rolar, o menu do cabeçalho se recolhe e o símbolo da logo — o micrômetro em “U” — desce até o trilho do cilindro à direita e passa a percorrê-lo: a haste avança com a leitura, o símbolo para em cada estação e mostra por instantes o nome da seção. O trilho tem margem própria (o conteúdo não passa por baixo) e troca de cor sobre seções escuras. Clicar no símbolo abre o índice de folhas em tela cheia; ao voltar ao topo, o menu reaparece. Em telas menores, o cabeçalho com a logo maior se recolhe ao descer e volta ao subir. O botão do WhatsApp fica sempre no canto inferior direito, com mensagem inicial editável. Metadados de compartilhamento e dados estruturados (schema.org) usam os contatos reais. As animações e desenhos são ilustrativos; as fotografias preservam as peças, com resolução limitada aos originais.
 
 ## Edição direto no site
 
@@ -27,6 +27,13 @@ A edição acontece na própria página. Entre em /admin com e-mail e senha (Sup
 - “Empresa e contatos” reúne nome, slogan, lema, telefone, WhatsApp, e-mail, endereço, cidade, CEP, parágrafos e as redes sociais (Instagram, Facebook, LinkedIn, YouTube, TikTok, X ou site), que aparecem com ícone no contato, no índice e no rodapé.
 
 Cada alteração confirmada é publicada na hora; a barra mostra o que foi salvo e onde (no Supabase ou, em desenvolvimento local, neste computador). “Desfazer” ou Ctrl+Z revertem as últimas 20 alterações, inclusive exclusões. Se o servidor recusar, a página volta ao último estado salvo e mostra o motivo.
+
+### Cor e tamanho, seções e curadoria com IA
+
+- **Cor e tamanho:** ao clicar num texto, uma barra flutuante oferece as cores da marca (ou qualquer outra), tamanho de 60% a 240% e “Restaurar”. Fica salvo em `styles` (chave do texto → cor e escala) e vale também para visitantes.
+- **Seções:** cada seção mostra, no modo edição, uma barra com ↑ ↓, Ocultar/Mostrar e Remover/Excluir; entre elas há “+ Inserir seção aqui”. Os modelos novos são Texto com foto, Números, Galeria de fotos, Chamada para contato e Depoimento. Uma seção nova entra oculta para visitantes, para ser preenchida antes de publicar. Numeração, menu, trilho, índice e rodapé acompanham a ordem automaticamente. A ordem fica em `layout`; seções nativas removidas podem ser recolocadas pelo mesmo “Inserir seção”.
+- **Curadoria com IA (Claude):** na barra de texto, “✦ IA” propõe uma versão (Melhorar, Encurtar, Corrigir português, Mais técnico, Mais comercial ou um pedido livre); a proposta pode ser ajustada e só é publicada ao clicar em “Aplicar”. “✦ Curadoria IA”, na barra de edição, revisa todos os textos visíveis e lista sugestões para aplicar, ignorar ou ver no site. As instruções proíbem inventar números, prazos, certificações ou clientes; os fatos vêm do conteúdo salvo, não do navegador.
+- **Configuração da IA:** defina `ANTHROPIC_API_KEY` nas variáveis de ambiente do servidor (na Vercel: Settings → Environment Variables) e publique de novo. Opcional: `ANTHROPIC_MODEL` (padrão `claude-opus-5-5`). Sem a chave, o restante da edição funciona e a IA mostra como ativá-la. A rota `/api/ai` só atende administradores logados, tem limite de 20 pedidos por minuto por instância e usa o retorno automático da API (`fallbacks: "default"`) para refazer em outro modelo um pedido recusado.
 
 ## Supabase (projeto central) e acesso
 
@@ -86,4 +93,4 @@ Nenhum repositório remoto ou deployment foi criado nesta preparação.
 
 ## Validação
 
-`npm test`: testes de validação, sessão local de desenvolvimento, modo demonstração e armazenamento (arquivo e Supabase, com respostas simuladas, incluindo a verificação de administrador). `USIBAR_STORAGE=file node --env-file=.env.local tests/integration.mjs`: integração local (modo arquivo) (servidor em 3000; cria e restaura dados de teste). `node tests/demo-integration.mjs`: leitura pública e bloqueio de alterações no servidor de demonstração em 3002.
+`npm test`: testes da IA (validação de pedidos e respostas), de estilos e seções, de validação, sessão local de desenvolvimento, modo demonstração e armazenamento (arquivo e Supabase, com respostas simuladas, incluindo a verificação de administrador). `USIBAR_STORAGE=file node --env-file=.env.local tests/integration.mjs`: integração local (modo arquivo) (servidor em 3000; cria e restaura dados de teste). `node tests/demo-integration.mjs`: leitura pública e bloqueio de alterações no servidor de demonstração em 3002.

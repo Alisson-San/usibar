@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { isDemo } from "./runtime.mjs";
 import { SITE_ID, SUPABASE_DEFAULTS } from "./supabase-config.mjs";
 
-export const CONTENT_KEYS = ["company", "products", "sectors", "process", "services", "pillars", "copy"];
+export const CONTENT_KEYS = ["company", "products", "sectors", "process", "services", "pillars", "copy", "styles", "layout"];
 const ROW_ID = "main";
 
 export { SITE_ID, SUPABASE_DEFAULTS };

@@ -17,7 +17,22 @@ import {
   type Part,
   type SaveState,
 } from "./editing";
-import { CopyContext, ImageSwap, T } from "./copy";
+import { CopyContext, ImageSwap, T, type Field, type TextStyle } from "./copy";
+import { CurationPanel, TextToolbar, type AiStatus } from "./assistant";
+import {
+  BlockBar,
+  blockDom,
+  BUILTIN_INFO,
+  BUILTINS,
+  defaultLayout,
+  isBuiltin,
+  SectionPicker,
+  TEMPLATE_INFO,
+  TEMPLATES,
+  TemplateSection,
+  type Block,
+} from "./blocks";
+import { LogoFull, LogoMark } from "./logo";
 import {
   Arrow,
   ContactCard,
@@ -55,15 +70,22 @@ const defaultProcess: Step[] = [
     copy: "Cilindros fabricados conforme a aplicação, com curso, dimensões e fixações definidos em projeto.",
   },
 ];
-// Sections as numbered sheets: header, cylinder navigation, index menu and footer share them.
-const navItems = [
-  { id: "solucoes", n: "01", k: "nav.1", d: "Soluções", hint: "Cilindros, blocos e usinagem de precisão" },
-  { id: "processo", n: "02", k: "nav.2", d: "Processo", hint: "Do desenho técnico à peça em movimento" },
-  { id: "pecas", n: "03", k: "nav.3", d: "Catálogo", hint: "Modelos que já produzimos" },
-  { id: "origem", n: "04", k: "nav.4", d: "Empresa", hint: "Quem somos e nossos pilares" },
-  { id: "segmentos", n: "05", k: "nav.5", d: "Segmentos", hint: "Onde nossos componentes trabalham" },
-  { id: "orcamento", n: "06", k: "nav.6", d: "Orçamento", hint: "Seu pedido em quatro respostas" },
-];
+// Sections as numbered sheets: header, cylinder navigation, index menu and footer all follow
+// the visible sections in the order the admin chose.
+type NavItem = { id: string; n: string; label: string; hint: string };
+function buildNav(c: Content): NavItem[] {
+  return c.layout
+    .filter((b) => !b.hidden)
+    .map((b, i) => {
+      const n = String(i + 1).padStart(2, "0");
+      if (isBuiltin(b.type)) {
+        const info = BUILTIN_INFO[b.type];
+        return { id: info.dom, n, label: c.copy[`nav.${b.type}`] ?? info.nav, hint: c.copy[`nav.${b.type}.hint`] ?? info.hint };
+      }
+      return { id: blockDom(b), n, label: String(b.data?.nav ?? TEMPLATE_INFO[b.type].name), hint: String(b.data?.title ?? "") };
+    });
+}
+const knownType = (t: unknown) => (BUILTINS as readonly unknown[]).includes(t) || (TEMPLATES as readonly unknown[]).includes(t);
 // Facts that may be missing from content saved before they existed.
 const companyDefaults = {
   address: "Rua Martin Biancho, 803 — Bairro Bela Vista",
@@ -105,7 +127,13 @@ export default function UsibarHome() {
     [undo, setUndo] = useState<Undo[]>([]),
     [hint, setHint] = useState(false),
     [editorPart, setEditorPart] = useState<Part | null>(null),
-    [companyOpen, setCompanyOpen] = useState(false);
+    [companyOpen, setCompanyOpen] = useState(false),
+    [activeField, setActiveField] = useState<Field | null>(null),
+    [aiStatus, setAiStatus] = useState<AiStatus>(null),
+    [curationOpen, setCurationOpen] = useState(false),
+    [pickerAt, setPickerAt] = useState<number | null>(null),
+    [railHello, setRailHello] = useState(false),
+    [waHello, setWaHello] = useState(false);
   const root = useRef<HTMLElement>(null),
     dialog = useRef<HTMLDivElement>(null),
     meter = useRef<HTMLElement>(null),
@@ -118,7 +146,10 @@ export default function UsibarHome() {
     savedRef = useRef<Content | null>(null),
     queue = useRef<Promise<unknown>>(Promise.resolve()),
     stale = useRef(false),
+    fields = useRef(new Map<string, Field>()),
     loaded = !!content;
+  const nav = content ? buildNav(content) : [];
+  const navKey = nav.map((n) => n.id).join("|");
 
   useEffect(() => {
     fetch("/api/company", { cache: "no-store" })
@@ -135,6 +166,8 @@ export default function UsibarHome() {
           services: d.services ?? [],
           pillars: d.pillars ?? [],
           copy: d.copy ?? {},
+          styles: d.styles ?? {},
+          layout: Array.isArray(d.layout) && d.layout.length && d.layout.every((b: Block) => knownType(b?.type)) ? d.layout : defaultLayout(),
         };
         contentRef.current = savedRef.current = c;
         stale.current = d.stale === true;
@@ -151,6 +184,10 @@ export default function UsibarHome() {
         if (!ok) return;
         setLogged(true);
         setStorage(a.storage ?? "file");
+        fetch("/api/ai", { cache: "no-store" })
+          .then((r) => r.json())
+          .then(setAiStatus)
+          .catch(() => setAiStatus({ configured: false }));
         setAccounts(a.login === "supabase");
         const url = new URL(location.href);
         if (url.searchParams.has("editar")) {
@@ -269,7 +306,7 @@ export default function UsibarHome() {
   // Header: shows the section in view, and steps aside while reading downwards.
   useEffect(() => {
     if (!loaded) return;
-    const ids = navItems.map((n) => n.id);
+    const ids = navKey.split("|").filter(Boolean);
     const seen = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && setSection(e.target.id)),
       { rootMargin: "-45% 0px -50% 0px" },
@@ -290,14 +327,23 @@ export default function UsibarHome() {
         const next = tops[i + 1] ?? document.body.scrollHeight;
         if (line >= tops[i]) p = i + Math.min(1, (line - tops[i]) / Math.max(1, next - tops[i]));
       }
-      cylNav.current?.style.setProperty("--p", String(Math.min(1, p / (ids.length - 1))));
+      const rail = cylNav.current;
+      if (!rail) return;
+      rail.style.setProperty("--p", String(Math.min(1, p / Math.max(1, ids.length - 1))));
+      // The rail switches to its light treatment over dark sections, so it never fights the text.
+      const under = document.elementFromPoint(innerWidth - 130, innerHeight / 2);
+      rail.classList.toggle("on-dark", !!under?.closest("[data-tone='dark']"));
     };
     rod();
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(rod);
       const y = scrollY;
-      setHeaderHidden(y > 240 && y > last + 4);
-      if (y < last - 4 || y < 240) setHeaderHidden(false);
+      // On wide screens the menu docks into the cylinder instead (see the docking timeline).
+      if (innerWidth >= 1100) setHeaderHidden(false);
+      else {
+        setHeaderHidden(y > 240 && y > last + 4);
+        if (y < last - 4 || y < 240) setHeaderHidden(false);
+      }
       last = y;
     };
     addEventListener("scroll", onScroll, { passive: true });
@@ -306,7 +352,14 @@ export default function UsibarHome() {
       removeEventListener("scroll", onScroll);
       cancelAnimationFrame(frame);
     };
-  }, [loaded]);
+  }, [loaded, navKey]);
+  // The symbol tells which section the reader reached, briefly, then gets out of the way.
+  useEffect(() => {
+    if (!section) return;
+    setRailHello(true);
+    const t = setTimeout(() => setRailHello(false), 1800);
+    return () => clearTimeout(t);
+  }, [section]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -321,23 +374,49 @@ export default function UsibarHome() {
         if (repeat) gsap.set(".intro-shutter", { display: "none" });
         else {
           const count = { value: 0 };
+          // The big logo of the opening flies into its place in the header.
+          const flight = () => {
+            const from = root.current!.querySelector(".intro-logo svg")!.getBoundingClientRect();
+            const to = root.current!.querySelector(".site-header .brand-logo")!.getBoundingClientRect();
+            return {
+              x: to.left + to.width / 2 - (from.left + from.width / 2),
+              y: to.top + to.height / 2 - (from.top + from.height / 2),
+              scale: to.width / from.width,
+            };
+          };
+          let f = { x: 0, y: 0, scale: 1 };
+          gsap.set(".site-header, .rail-mark", { opacity: 0 });
           intro
-            .to(count, {
-              value: 100,
-              duration: 0.9,
-              ease: "power2.inOut",
-              onUpdate: () => {
-                const v = Math.round(count.value);
-                if (meter.current) meter.current.style.transform = `scaleX(${v / 100})`;
-                if (counter.current) counter.current.textContent = String(v).padStart(3, "0");
+            .from(".intro-logo", { opacity: 0, scale: 0.92, duration: 0.6, ease: "power3.out" })
+            .to(
+              count,
+              {
+                value: 100,
+                duration: 0.9,
+                ease: "power2.inOut",
+                onUpdate: () => {
+                  const v = Math.round(count.value);
+                  if (meter.current) meter.current.style.transform = `scaleX(${v / 100})`;
+                  if (counter.current) counter.current.textContent = String(v).padStart(3, "0");
+                },
               },
+              "-=.2",
+            )
+            .to(".intro-meter, .intro-info", { opacity: 0, duration: 0.3 })
+            .add(() => {
+              f = flight();
             })
-            .to(".intro-brand", { yPercent: -40, opacity: 0, duration: 0.45, ease: "power2.in" })
-            .to(".intro-shutter", { clipPath: "inset(0 0 100% 0)", duration: 0.8, ease: "expo.inOut" }, "-=.2")
-            .set(".intro-shutter", { display: "none" });
+            .to(".intro-logo", { x: () => f.x, y: () => f.y, scale: () => f.scale, duration: 1, ease: "expo.inOut" })
+            .to(".intro-shutter", { backgroundColor: "rgba(238, 231, 220, 0)", duration: 0.7, ease: "power2.inOut" }, "<+.25")
+            .set(".site-header, .rail-mark", { opacity: 1 })
+            .set(".intro-shutter", { display: "none" })
+            .add(() => {
+              setWaHello(true);
+              setTimeout(() => setWaHello(false), 5200);
+            });
         }
         intro
-          .from(".site-header", { opacity: 0, y: -20, duration: 0.8, ease: "power3.out" }, repeat ? 0 : "-=.5")
+          .from(".site-header .main-nav > a, .site-header .header-contact, .site-header .menu-toggle", { opacity: 0, y: -12, stagger: 0.05, duration: 0.6, ease: "power3.out" }, repeat ? 0 : "-=.3")
           .from(".hero-title .line-inner", { yPercent: 115, rotate: 3, stagger: 0.09, duration: 1.05, ease: "expo.out" }, "-=.7")
           .from(".hero-target", { scale: 0.7, opacity: 0, svgOrigin: "262 176", duration: 1.4, ease: "expo.out" }, "-=1")
           .from(".hero-part", { y: 50, x: 40, opacity: 0, duration: 1.4, ease: "expo.out" }, "<")
@@ -404,6 +483,37 @@ export default function UsibarHome() {
         };
       });
 
+      // Docking: as reading starts, the header menu folds away and the symbol of the logo flies
+      // from the header into the cylinder rail, where it then rides along the sections.
+      mm.add("(min-width: 1100px) and (prefers-reduced-motion: no-preference)", () => {
+        const r = root.current!;
+        const brandU = r.querySelector<SVGGElement>(".site-header .brand-logo .lg-u")!;
+        const disc = r.querySelector<HTMLElement>(".rail-mark .rail-disc")!;
+        const track = r.querySelector<HTMLElement>(".cyl-track")!;
+        const svg = disc.querySelector("svg")!;
+        gsap.set(brandU, { opacity: 0 }); // the rail symbol stands exactly where it was
+        gsap.set(".rail-fade", { opacity: 0 });
+        const vec = () => {
+          const a = brandU.getBoundingClientRect();
+          const t = track.getBoundingClientRect();
+          return {
+            x: a.left + a.width / 2 - (t.left + t.width / 2),
+            y: a.top + a.height / 2 - t.top,
+            s: a.height / parseFloat(getComputedStyle(svg).height),
+          };
+        };
+        const dock = gsap.timeline({
+          scrollTrigger: { start: 0, end: () => innerHeight * 0.6, scrub: 0.5, invalidateOnRefresh: true },
+        });
+        dock
+          .fromTo(disc, { x: () => vec().x, y: () => vec().y, scale: () => vec().s }, { x: 0, y: 0, scale: 1, ease: "power2.inOut", duration: 1 }, 0)
+          .fromTo(".rail-disc-bg", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.45 }, 0.45)
+          .to(".site-header .main-nav > a, .site-header .header-contact, .site-header .menu-toggle", { opacity: 0, x: 40, stagger: 0.04, duration: 0.35 }, 0)
+          .to(".site-header", { yPercent: -110, duration: 0.35, ease: "power2.in" }, 0.62)
+          .to(".rail-fade", { opacity: 1, duration: 0.4, stagger: 0.03 }, 0.5);
+        return () => dock.kill();
+      });
+
       mm.add("(min-width: 768px) and (prefers-reduced-motion: no-preference)", () => {
         const lenis = new Lenis({ lerp: 0.085, smoothWheel: true, anchors: true });
         lenisRef.current = lenis;
@@ -432,7 +542,7 @@ export default function UsibarHome() {
     if (!loaded) return;
     const frame = requestAnimationFrame(() => ScrollTrigger.refresh());
     return () => cancelAnimationFrame(frame);
-  }, [filter, editing, loaded]);
+  }, [filter, editing, loaded, navKey, content?.layout.length]);
 
   const parts = (content?.products ?? [])
     .filter((p) => filter === "all" || p.category === filter)
@@ -468,21 +578,296 @@ export default function UsibarHome() {
         {failed && <button onClick={() => location.reload()}>Tentar novamente ↗</button>}
       </main>
     );
-  const { company, products, sectors, process: steps, services, pillars } = content;
+  const { company, products, sectors, process: steps, services, pillars, layout } = content;
   const wa = (text: string) => `https://wa.me/${company.whatsapp}?text=${encodeURIComponent(text)}`;
-  const ed: Ed = (value, label, apply) => (
-    <Editable value={value} editing={editing} label={label} onCommit={(v) => commit(`${label} alterado`, (c) => apply(c, v))} />
+  const ed: Ed = (value, label, apply, key) => (
+    <Editable
+      value={value}
+      editing={editing}
+      label={label}
+      styleKey={key ?? label.normalize("NFD").replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 70)}
+      onCommit={(v) => commit(`${label} alterado`, (c) => apply(c, v))}
+    />
   );
-  const text = (key: string, label: string) => ed(company[key] ?? "", label, (c, v) => ({ ...c, company: { ...c.company, [key]: v } }));
+  const text = (key: string, label: string) => ed(company[key] ?? "", label, (c, v) => ({ ...c, company: { ...c.company, [key]: v } }), `company.${key}`);
   const tx = (k: string, d: string) => content.copy[k] ?? d;
   const copyCtx = {
     copy: content.copy,
+    styles: content.styles,
     editing,
     setText: (k: string, v: string, label: string) => commit(`${label} alterado`, (c) => ({ ...c, copy: { ...c.copy, [k]: v } })),
+    setStyle: (k: string, st: TextStyle | null, label: string) =>
+      commit(`Estilo de “${label}” alterado`, (c) => {
+        const styles = { ...c.styles };
+        if (st) styles[k] = st;
+        else delete styles[k];
+        return { ...c, styles };
+      }),
     upload,
+    fields,
+    active: activeField,
+    activate: setActiveField,
   };
   const heroImage = company.heroImageUrl || HERO_IMAGE;
-  const footerNav = navItems.map((n) => [`#${n.id}`, tx(n.k, n.d)] as [string, string]);
+  const footerNav = nav.map((n) => [`#${n.id}`, n.label] as [string, string]);
+  const current = nav.find((n) => n.id === section);
+
+  // Section order, visibility and template sections.
+  const setLayout = (label: string, change: (l: Block[]) => Block[]) => commit(label, (c) => ({ ...c, layout: change(c.layout) }));
+  const updateBlock = (id: string, change: (d: Record<string, unknown>) => Record<string, unknown>, label: string) =>
+    setLayout(`${label} alterado`, (l) => l.map((b) => (b.id === id ? { ...b, data: change(b.data ?? {}) } : b)));
+  const blockName = (b: Block) => (isBuiltin(b.type) ? tx(`nav.${b.type}`, BUILTIN_INFO[b.type].nav) : String(b.data?.nav ?? TEMPLATE_INFO[b.type].name));
+  const missing = BUILTINS.filter((t) => !layout.some((b) => b.type === t));
+  const numbers = new Map<string, string>();
+  layout.filter((b) => !b.hidden).forEach((b, i) => numbers.set(b.id, String(i + 1).padStart(2, "0")));
+
+  const catalog = (num: string) => (
+    <section className="product-section" id="pecas">
+      <div className="section-head reveal">
+        <div>
+          <span className="eyebrow">
+            {num} — <T k="catalog.eyebrow" d="CATÁLOGO DE COMPONENTES" label="Catálogo — rótulo" />
+          </span>
+          <h2>
+            <T k="catalog.title.1" d="Modelos que já produzimos." label="Catálogo — título" />
+            <br />
+            <em>
+              <T k="catalog.title.2" d="Ponto de partida para o seu projeto." label="Catálogo — título (destaque)" />
+            </em>
+          </h2>
+        </div>
+        <p>
+          <T k="catalog.intro" d="Abra um modelo para ver detalhes, pedir cotação ou incluí-lo como referência no seu orçamento." label="Catálogo — introdução" />
+        </p>
+      </div>
+      <div className="catalog-toolbar">
+        <div className="catalog-tabs" role="group" aria-label="Filtrar por categoria">
+          {[
+            ["all", "catalog.tab.all", "Todas as peças"],
+            ["cilindros", "catalog.tab.cilindros", "Cilindros"],
+            ["blocos", "catalog.tab.blocos", "Blocos"],
+          ].map(([value, k, d]) => (
+            <button key={value} aria-pressed={filter === value} className={filter === value ? "selected" : ""} onClick={() => setFilter(value)}>
+              <T k={k} d={d} label="Catálogo — filtro" />
+              <span>{value === "all" ? products.length : products.filter((p) => p.category === value).length}</span>
+            </button>
+          ))}
+        </div>
+        <span className="tiny-mono" aria-live="polite">
+          {editing ? (
+            "CLIQUE EM UMA PEÇA PARA EDITAR ↙"
+          ) : (
+            <>
+              {parts.length} <T k="catalog.count" d="MODELOS · PRODUÇÃO CONFORME PROJETO" label="Catálogo — contador" />
+            </>
+          )}
+        </span>
+      </div>
+      <div className="product-grid">
+        {editing && (
+          <button className="product-card product-add" onClick={() => setEditorPart({ ...blankPart, category: filter === "blocos" ? "blocos" : "cilindros" })}>
+            <span className="product-add-plus" aria-hidden="true">
+              +
+            </span>
+            <strong>Cadastrar nova peça</strong>
+            <span className="tiny-mono">FOTO · CÓDIGO · DESCRIÇÃO</span>
+          </button>
+        )}
+        {parts.map((part, i) => (
+          <button
+            className="product-card"
+            key={part.id}
+            onClick={() => (editing ? setEditorPart(part) : setActiveId(part.id))}
+            aria-label={`${editing ? "Editar" : "Ver detalhes de"} ${part.title}`}
+          >
+            <div className="product-top tiny-mono">
+              <span>
+                {part.code}
+                {part.featured ? ` / ${tx("catalog.featured", "DESTAQUE")}` : ""}
+              </span>
+              <span>{quote.refs.includes(part.code) ? `${tx("catalog.inquote", "NO ORÇAMENTO")} ✓` : String(i + 1).padStart(2, "0")}</span>
+            </div>
+            <div className="product-photo">
+              <div className="product-cross one" />
+              <div className="product-cross two" />
+              <img loading="lazy" src={part.imageUrl} alt="" />
+            </div>
+            <div className="product-bottom">
+              <div>
+                <span className="eyebrow">{part.category === "cilindros" ? tx("catalog.cat.cilindros", "CILINDRO HIDRÁULICO") : tx("catalog.cat.blocos", "BLOCO HIDRÁULICO")}</span>
+                <h3>{part.title}</h3>
+                <span className="product-specs">{part.specs}</span>
+              </div>
+              <span className="round-arrow" aria-hidden="true">
+                {editing ? "✎" : "↗"}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className="catalog-close">
+        <span className="mini-cross" aria-hidden="true">
+          ✳
+        </span>
+        <p>
+          <T k="catalog.close.1" d="Não encontrou a configuração que precisa?" label="Catálogo — fechamento" />
+          <br />
+          <strong>
+            <T k="catalog.close.2" d="Fabricamos conforme as especificações do seu projeto." label="Catálogo — fechamento (destaque)" />
+          </strong>
+        </p>
+        <a href="#orcamento">
+          <T k="catalog.close.cta" d="Enviar especificações" label="Catálogo — botão" /> <Arrow />
+        </a>
+      </div>
+    </section>
+  );
+
+  const origin = (num: string) => (
+    <section className="origin" id="origem">
+      <div className="origin-image">
+        <img src={company.benchImageUrl} alt="Cilindros hidráulicos fabricados pela Usibar sobre a bancada da oficina" />
+        <span className="image-caption tiny-mono">
+          <T k="origin.caption" d="DENTRO DA USIBAR" label="Empresa — legenda da foto" /> / {company.city}
+        </span>
+        <span className="image-bracket tl" />
+        <span className="image-bracket br" />
+        <ImageSwap label="foto da empresa" onChange={(url) => commit("Foto da empresa trocada", (c) => ({ ...c, company: { ...c.company, benchImageUrl: url } }))} />
+      </div>
+      <div className="origin-copy reveal">
+        <span className="eyebrow">
+          {num} — <T k="origin.eyebrow" d="A EMPRESA" label="Empresa — rótulo" />
+        </span>
+        <h2>
+          <T k="origin.title.1" d="Usibar." label="Empresa — título" />
+          <br />
+          <em>
+            <T k="origin.title.2" d="Usinagens especiais." label="Empresa — título (destaque)" />
+          </em>
+        </h2>
+        <p>{text("aboutParagraph1", "Apresentação — parágrafo 1")}</p>
+        <p>{text("aboutParagraph2", "Apresentação — parágrafo 2")}</p>
+        <p>{text("aboutParagraph3", "Apresentação — parágrafo 3")}</p>
+        <div className="origin-stat">
+          <strong>{text("experienceYears", "Anos de experiência")}</strong>
+          <span>
+            <T k="origin.stat" d="ANOS DE EXPERIÊNCIA EM TECNOLOGIA HIDRÁULICA" label="Empresa — legenda do número" />
+          </span>
+        </div>
+      </div>
+      <Pillars pillars={pillars} ed={ed} />
+    </section>
+  );
+
+  const sectorsSection = (num: string) => (
+    <section className="sectors-section" id="segmentos" aria-labelledby="sectors-title">
+      <div className="section-head reveal">
+        <div>
+          <span className="eyebrow" id="sectors-title">
+            {num} — <T k="sectors.eyebrow" d="SEGMENTOS ATENDIDOS" label="Segmentos — rótulo" />
+          </span>
+          <h2>
+            <T k="sectors.title.1" d="Onde nossos componentes" label="Segmentos — título" />
+            <br />
+            <em>
+              <T k="sectors.title.2" d="trabalham todos os dias." label="Segmentos — título (destaque)" />
+            </em>
+          </h2>
+        </div>
+      </div>
+      <ul className="sector-grid">
+        {sectors.map((s, i) => (
+          <li className="sector-tile" key={s.id}>
+            <SectorIcon id={s.id} />
+            <span className="tiny-mono">{String(i + 1).padStart(2, "0")}</span>
+            <h3>
+              {ed(
+                s.name,
+                `Segmento ${i + 1}`,
+                (c, v) => ({ ...c, sectors: c.sectors.map((x) => (x.id === s.id ? { ...x, name: v } : x)) }),
+                `sector.${s.id}.name`,
+              )}
+            </h3>
+            {s.id === "elevadores" && (
+              <span className="sector-badge">
+                <T k="sectors.badge" d="Atuação de destaque" label="Segmentos — selo" />
+              </span>
+            )}
+            {editing && (
+              <button
+                className="sector-remove"
+                aria-label={`Remover segmento ${s.name}`}
+                onClick={() => commit(`Segmento “${s.name}” removido`, (c) => ({ ...c, sectors: c.sectors.filter((x) => x.id !== s.id) }))}
+              >
+                ×
+              </button>
+            )}
+          </li>
+        ))}
+        {editing && sectors.length < 20 && (
+          <li>
+            <button
+              className="sector-add"
+              onClick={() =>
+                commit("Segmento adicionado", (c) => ({
+                  ...c,
+                  sectors: [...c.sectors, { id: crypto.randomUUID(), name: "Novo segmento", code: `SEC-${String(c.sectors.length + 1).padStart(2, "0")}` }],
+                }))
+              }
+            >
+              + Adicionar segmento
+            </button>
+          </li>
+        )}
+      </ul>
+    </section>
+  );
+
+  const renderBlock = (b: Block, num: string) => {
+    switch (b.type) {
+      case "solutions":
+        return (
+          <Solutions
+            num={num}
+            services={services}
+            products={products}
+            ed={ed}
+            apply={(change, label) => commit(label, change)}
+            onBrowse={(cat) => {
+              setFilter(cat);
+              goTo("pecas");
+            }}
+            onQuote={(type) => {
+              setQuote((q) => ({ ...q, type }));
+              goTo("orcamento");
+            }}
+          />
+        );
+      case "process":
+        return (
+          <ProcessSection
+            num={num}
+            steps={steps}
+            editing={editing}
+            lenis={lenisRef}
+            onEdit={(i, key, v) =>
+              commit(`Texto da etapa ${i + 1} alterado`, (c) => ({ ...c, process: c.process.map((s, j) => (j === i ? { ...s, [key]: v } : s)) }))
+            }
+          />
+        );
+      case "catalog":
+        return catalog(num);
+      case "origin":
+        return origin(num);
+      case "sectors":
+        return sectorsSection(num);
+      case "quote":
+        return <QuoteBuilder num={num} company={company} sectors={sectors} services={services} quote={quote} setQuote={setQuote} />;
+      default:
+        return <TemplateSection block={b} num={num} update={updateBlock} whatsapp={wa} />;
+    }
+  };
+
   return (
     <CopyContext.Provider value={copyCtx}>
       <main className={"usibar-site" + (editing ? " editing" : "")} ref={root}>
@@ -490,14 +875,14 @@ export default function UsibarHome() {
           {tx("skip", "Pular para o catálogo")}
         </a>
         <div className="intro-shutter" aria-hidden="true">
-          <div className="intro-brand">
-            USIBAR<span>✳</span>
+          <div className="intro-logo">
+            <LogoFull />
           </div>
           <div className="intro-meter">
             <i ref={meter} />
           </div>
           <div className="intro-info">
-            <span>USIBAR / TECNOLOGIA EM HIDRÁULICA</span>
+            <span>TECNOLOGIA, FORÇA E DESEMPENHO</span>
             <span>
               <span ref={counter}>000</span> / 100
             </span>
@@ -506,15 +891,18 @@ export default function UsibarHome() {
 
         <header className={"site-header" + (headerHidden && !menu ? " tucked" : "")}>
           <a className="brand" href="#inicio" aria-label="Usibar, início">
-            <img src="/assets/logo-usibar-light.webp" alt="Usibar — Tecnologia em hidráulica" />
+            <LogoFull className="brand-logo" />
           </a>
           <nav className="main-nav" aria-label="Navegação principal">
-            {navItems.slice(0, 5).map((n) => (
-              <a key={n.id} href={`#${n.id}`} aria-current={section === n.id ? "location" : undefined}>
-                <small>{n.n}</small>
-                <T k={n.k} d={n.d} label={`Menu — ${n.d}`} />
-              </a>
-            ))}
+            {nav
+              .filter((n) => n.id !== "orcamento")
+              .slice(0, 5)
+              .map((n) => (
+                <a key={n.id} href={`#${n.id}`} aria-current={section === n.id ? "location" : undefined}>
+                  <small>{n.n}</small>
+                  {n.label}
+                </a>
+              ))}
           </nav>
           <a className="header-contact" href="#orcamento" aria-current={section === "orcamento" ? "location" : undefined}>
             <T k="header.cta" d="Solicitar orçamento" label="Cabeçalho — botão" />
@@ -526,37 +914,63 @@ export default function UsibarHome() {
           </button>
         </header>
 
-        {/* Section navigation drawn as a hydraulic cylinder: the rod extends with the reading. */}
+        {/* While reading, the menu docks into a hydraulic cylinder: the rod extends with the page and
+            the Usibar symbol rides at its end, from station to station. */}
         <nav className="cyl-nav" ref={cylNav} aria-label="Seções da página">
-          <span className="cyl-barrel" aria-hidden="true">
+          <span className="cyl-barrel rail-fade" aria-hidden="true">
             <i />
           </span>
           <span className="cyl-track">
-            <i className="cyl-rod" aria-hidden="true" />
-            <i className="cyl-eye" aria-hidden="true" />
-            {navItems.map((n, i) => (
+            <i className="cyl-line rail-fade" aria-hidden="true" />
+            <i className="cyl-rod rail-fade" aria-hidden="true" />
+            {nav.map((n, i) => (
               <button
                 key={n.id}
-                style={{ top: `${(i / (navItems.length - 1)) * 100}%` }}
-                className={section === n.id ? "on" : ""}
+                style={{ top: `${(i / Math.max(1, nav.length - 1)) * 100}%` }}
+                className={"station rail-fade" + (section === n.id ? " on" : "")}
                 aria-current={section === n.id ? "location" : undefined}
                 onClick={() => goTo(n.id)}
               >
                 <b>{n.n}</b>
-                <span>{tx(n.k, n.d)}</span>
+                <span>{n.label}</span>
               </button>
             ))}
+            <button className={"rail-mark" + (railHello ? " hello" : "")} onClick={() => setMenu(true)} aria-label={`${tx("header.index", "Índice")} — seção atual: ${current?.label ?? "início"}`}>
+              <span className="rail-disc">
+                <i className="rail-disc-bg" />
+                <LogoMark />
+              </span>
+              <span className="rail-now">
+                <small>{current?.n ?? "00"}</small> {current?.label ?? tx("header.index", "Índice")}
+              </span>
+            </button>
           </span>
         </nav>
+
+        <a
+          className={"wa-float" + (waHello ? " hello" : "")}
+          href={wa(tx("wa.float.msg", "Olá, equipe Usibar! Gostaria de falar sobre um projeto."))}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Falar com a Usibar pelo WhatsApp"
+        >
+          <Glyph name="whatsapp" />
+          <span>
+            <T k="wa.float" d="Fale no WhatsApp" label="Botão flutuante do WhatsApp" />
+          </span>
+        </a>
 
         {menu && (
           <div className="index-menu" id="index-menu" role="dialog" aria-modal="true" aria-label={tx("header.index", "Índice")} data-lenis-prevent ref={indexRef}>
             <div className="index-top">
-              <span className="tiny-mono">{tx("index.title", "ÍNDICE DE FOLHAS · USIBAR")}</span>
+              <span className="index-logo">
+                <LogoFull />
+              </span>
+              <span className="tiny-mono">{tx("index.title", "ÍNDICE DE FOLHAS")}</span>
               <button onClick={() => setMenu(false)}>{tx("index.close", "Fechar")} ×</button>
             </div>
             <ol className="index-list">
-              {navItems.map((n, i) => (
+              {nav.map((n, i) => (
                 <li key={n.id} style={{ "--i": i } as React.CSSProperties}>
                   <a
                     href={`#${n.id}`}
@@ -568,8 +982,8 @@ export default function UsibarHome() {
                     }}
                   >
                     <b>{n.n}</b>
-                    <strong>{tx(n.k, n.d)}</strong>
-                    <span>{tx(`${n.k}.hint`, n.hint)}</span>
+                    <strong>{n.label}</strong>
+                    <span>{n.hint}</span>
                   </a>
                 </li>
               ))}
@@ -582,8 +996,7 @@ export default function UsibarHome() {
           <div className="hero-layout">
             <div className="hero-copy">
               <span className="eyebrow hero-eyebrow">
-                <T k="hero.eyebrow" d="FABRICAÇÃO SOB MEDIDA" label="Topo — rótulo" /> · {text("city", "Cidade / UF")} —{" "}
-                <T k="hero.country" d="BRASIL" label="Topo — país" />
+                <T k="hero.eyebrow" d="FABRICAÇÃO SOB MEDIDA" label="Topo — rótulo" /> · {text("city", "Cidade / UF")} — <T k="hero.country" d="BRASIL" label="Topo — país" />
               </span>
               <h1 className="hero-title">
                 <span>
@@ -605,8 +1018,7 @@ export default function UsibarHome() {
               </h1>
               <p className="hero-lead">{text("motto", "Lema da empresa")}</p>
               <p className="hero-note">
-                {text("subheadline", "Subtítulo do topo")}{" "}
-                <T k="hero.note" d="Envie o desenho técnico ou as especificações da sua aplicação." label="Topo — convite" />
+                {text("subheadline", "Subtítulo do topo")} <T k="hero.note" d="Envie o desenho técnico ou as especificações da sua aplicação." label="Topo — convite" />
               </p>
               <div className="hero-actions">
                 <a href="#orcamento" className="btn-primary">
@@ -622,237 +1034,55 @@ export default function UsibarHome() {
                 <T k="hero.sheet" d="FICHA / COMPONENTE 01 · CILINDRO COM OLHAL" label="Topo — etiqueta da foto" />
               </span>
               <HeroArt src={heroImage} />
-              <ImageSwap
-                label="foto do topo"
-                onChange={(url) => commit("Foto do topo trocada", (c) => ({ ...c, company: { ...c.company, heroImageUrl: url } }))}
-              />
+              <ImageSwap label="foto do topo" onChange={(url) => commit("Foto do topo trocada", (c) => ({ ...c, company: { ...c.company, heroImageUrl: url } }))} />
             </div>
           </div>
           <ProofBar company={company} ed={ed} />
         </section>
 
-        <Solutions
-          services={services}
-          products={products}
-          ed={ed}
-          apply={(change, label) => commit(label, change)}
-          onBrowse={(cat) => {
-            setFilter(cat);
-            goTo("pecas");
-          }}
-          onQuote={(type) => {
-            setQuote((q) => ({ ...q, type }));
-            goTo("orcamento");
-          }}
-        />
-
-        <ProcessSection
-          steps={steps}
-          editing={editing}
-          lenis={lenisRef}
-          onEdit={(i, key, v) =>
-            commit(`Texto da etapa ${i + 1} alterado`, (c) => ({
-              ...c,
-              process: c.process.map((s, j) => (j === i ? { ...s, [key]: v } : s)),
-            }))
-          }
-        />
-
-        <section className="product-section" id="pecas">
-          <div className="section-head reveal">
-            <div>
-              <span className="eyebrow">
-                <T k="catalog.eyebrow" d="03 — CATÁLOGO DE COMPONENTES" label="Catálogo — rótulo" />
-              </span>
-              <h2>
-                <T k="catalog.title.1" d="Modelos que já produzimos." label="Catálogo — título" />
-                <br />
-                <em>
-                  <T k="catalog.title.2" d="Ponto de partida para o seu projeto." label="Catálogo — título (destaque)" />
-                </em>
-              </h2>
-            </div>
-            <p>
-              <T k="catalog.intro" d="Abra um modelo para ver detalhes, pedir cotação ou incluí-lo como referência no seu orçamento." label="Catálogo — introdução" />
-            </p>
-          </div>
-          <div className="catalog-toolbar">
-            <div className="catalog-tabs" role="group" aria-label="Filtrar por categoria">
-              {[
-                ["all", "catalog.tab.all", "Todas as peças"],
-                ["cilindros", "catalog.tab.cilindros", "Cilindros"],
-                ["blocos", "catalog.tab.blocos", "Blocos"],
-              ].map(([value, k, d]) => (
-                <button key={value} aria-pressed={filter === value} className={filter === value ? "selected" : ""} onClick={() => setFilter(value)}>
-                  <T k={k} d={d} label="Catálogo — filtro" />
-                  <span>{value === "all" ? products.length : products.filter((p) => p.category === value).length}</span>
-                </button>
-              ))}
-            </div>
-            <span className="tiny-mono" aria-live="polite">
-              {editing ? "CLIQUE EM UMA PEÇA PARA EDITAR ↙" : (
-                <>
-                  {parts.length} <T k="catalog.count" d="MODELOS · PRODUÇÃO CONFORME PROJETO" label="Catálogo — contador" />
-                </>
-              )}
-            </span>
-          </div>
-          <div className="product-grid">
-            {editing && (
-              <button className="product-card product-add" onClick={() => setEditorPart({ ...blankPart, category: filter === "blocos" ? "blocos" : "cilindros" })}>
-                <span className="product-add-plus" aria-hidden="true">
-                  +
-                </span>
-                <strong>Cadastrar nova peça</strong>
-                <span className="tiny-mono">FOTO · CÓDIGO · DESCRIÇÃO</span>
-              </button>
-            )}
-            {parts.map((part, i) => (
-              <button
-                className="product-card"
-                key={part.id}
-                onClick={() => (editing ? setEditorPart(part) : setActiveId(part.id))}
-                aria-label={`${editing ? "Editar" : "Ver detalhes de"} ${part.title}`}
-              >
-                <div className="product-top tiny-mono">
-                  <span>
-                    {part.code}
-                    {part.featured ? ` / ${tx("catalog.featured", "DESTAQUE")}` : ""}
-                  </span>
-                  <span>{quote.refs.includes(part.code) ? `${tx("catalog.inquote", "NO ORÇAMENTO")} ✓` : String(i + 1).padStart(2, "0")}</span>
-                </div>
-                <div className="product-photo">
-                  <div className="product-cross one" />
-                  <div className="product-cross two" />
-                  <img loading="lazy" src={part.imageUrl} alt="" />
-                </div>
-                <div className="product-bottom">
-                  <div>
-                    <span className="eyebrow">
-                      {part.category === "cilindros" ? tx("catalog.cat.cilindros", "CILINDRO HIDRÁULICO") : tx("catalog.cat.blocos", "BLOCO HIDRÁULICO")}
-                    </span>
-                    <h3>{part.title}</h3>
-                    <span className="product-specs">{part.specs}</span>
-                  </div>
-                  <span className="round-arrow" aria-hidden="true">
-                    {editing ? "✎" : "↗"}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-          <div className="catalog-close">
-            <span className="mini-cross" aria-hidden="true">
-              ✳
-            </span>
-            <p>
-              <T k="catalog.close.1" d="Não encontrou a configuração que precisa?" label="Catálogo — fechamento" />
-              <br />
-              <strong>
-                <T k="catalog.close.2" d="Fabricamos conforme as especificações do seu projeto." label="Catálogo — fechamento (destaque)" />
-              </strong>
-            </p>
-            <a href="#orcamento">
-              <T k="catalog.close.cta" d="Enviar especificações" label="Catálogo — botão" /> <Arrow />
-            </a>
-          </div>
-        </section>
-
-        <section className="origin" id="origem">
-          <div className="origin-image">
-            <img src={company.benchImageUrl} alt="Cilindros hidráulicos fabricados pela Usibar sobre a bancada da oficina" />
-            <span className="image-caption tiny-mono">
-              <T k="origin.caption" d="DENTRO DA USIBAR" label="Empresa — legenda da foto" /> / {company.city}
-            </span>
-            <span className="image-bracket tl" />
-            <span className="image-bracket br" />
-            <ImageSwap label="foto da empresa" onChange={(url) => commit("Foto da empresa trocada", (c) => ({ ...c, company: { ...c.company, benchImageUrl: url } }))} />
-          </div>
-          <div className="origin-copy reveal">
-            <span className="eyebrow">
-              <T k="origin.eyebrow" d="04 — A EMPRESA" label="Empresa — rótulo" />
-            </span>
-            <h2>
-              <T k="origin.title.1" d="Usibar." label="Empresa — título" />
-              <br />
-              <em>
-                <T k="origin.title.2" d="Usinagens especiais." label="Empresa — título (destaque)" />
-              </em>
-            </h2>
-            <p>{text("aboutParagraph1", "Apresentação — parágrafo 1")}</p>
-            <p>{text("aboutParagraph2", "Apresentação — parágrafo 2")}</p>
-            <p>{text("aboutParagraph3", "Apresentação — parágrafo 3")}</p>
-            <div className="origin-stat">
-              <strong>{text("experienceYears", "Anos de experiência")}</strong>
-              <span>
-                <T k="origin.stat" d="ANOS DE EXPERIÊNCIA EM TECNOLOGIA HIDRÁULICA" label="Empresa — legenda do número" />
-              </span>
-            </div>
-          </div>
-          <Pillars pillars={pillars} ed={ed} />
-        </section>
-
-        <section className="sectors-section" id="segmentos" aria-labelledby="sectors-title">
-          <div className="section-head reveal">
-            <div>
-              <span className="eyebrow" id="sectors-title">
-                <T k="sectors.eyebrow" d="05 — SEGMENTOS ATENDIDOS" label="Segmentos — rótulo" />
-              </span>
-              <h2>
-                <T k="sectors.title.1" d="Onde nossos componentes" label="Segmentos — título" />
-                <br />
-                <em>
-                  <T k="sectors.title.2" d="trabalham todos os dias." label="Segmentos — título (destaque)" />
-                </em>
-              </h2>
-            </div>
-          </div>
-          <ul className="sector-grid">
-            {sectors.map((s, i) => (
-              <li className="sector-tile" key={s.id}>
-                <SectorIcon id={s.id} />
-                <span className="tiny-mono">{String(i + 1).padStart(2, "0")}</span>
-                <h3>
-                  {ed(s.name, `Segmento ${i + 1}`, (c, v) => ({
-                    ...c,
-                    sectors: c.sectors.map((x) => (x.id === s.id ? { ...x, name: v } : x)),
-                  }))}
-                </h3>
-                {s.id === "elevadores" && (
-                  <span className="sector-badge">
-                    <T k="sectors.badge" d="Atuação de destaque" label="Segmentos — selo" />
-                  </span>
-                )}
-                {editing && (
-                  <button
-                    className="sector-remove"
-                    aria-label={`Remover segmento ${s.name}`}
-                    onClick={() => commit(`Segmento “${s.name}” removido`, (c) => ({ ...c, sectors: c.sectors.filter((x) => x.id !== s.id) }))}
-                  >
-                    ×
-                  </button>
-                )}
-              </li>
-            ))}
-            {editing && sectors.length < 20 && (
-              <li>
-                <button
-                  className="sector-add"
-                  onClick={() =>
-                    commit("Segmento adicionado", (c) => ({
-                      ...c,
-                      sectors: [...c.sectors, { id: crypto.randomUUID(), name: "Novo segmento", code: `SEC-${String(c.sectors.length + 1).padStart(2, "0")}` }],
-                    }))
+        {editing && (
+          <button className="block-insert" onClick={() => setPickerAt(0)}>
+            + Inserir seção aqui
+          </button>
+        )}
+        {layout.map((b, i) => {
+          if (b.hidden && !editing) return null;
+          const num = numbers.get(b.id) ?? "··";
+          return (
+            <div key={b.id} className={"block" + (b.hidden ? " is-hidden" : "")} data-block={b.type}>
+              {editing && (
+                <BlockBar
+                  block={b}
+                  num={num}
+                  name={blockName(b)}
+                  first={i === 0}
+                  last={i === layout.length - 1}
+                  onMove={(dir) =>
+                    setLayout(`Seção “${blockName(b)}” movida`, (l) => {
+                      const next = [...l];
+                      const j = i + dir;
+                      [next[i], next[j]] = [next[j], next[i]];
+                      return next;
+                    })
                   }
-                >
-                  + Adicionar segmento
+                  onToggle={() =>
+                    setLayout(b.hidden ? `Seção “${blockName(b)}” publicada` : `Seção “${blockName(b)}” ocultada`, (l) =>
+                      l.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden || undefined } : x)),
+                    )
+                  }
+                  onRemove={() => setLayout(`Seção “${blockName(b)}” removida`, (l) => l.filter((x) => x.id !== b.id))}
+                  onRename={isBuiltin(b.type) ? undefined : (v) => updateBlock(b.id, (d) => ({ ...d, nav: v.slice(0, 40) }), "Nome da seção")}
+                />
+              )}
+              {renderBlock(b, num)}
+              {editing && (
+                <button className="block-insert" onClick={() => setPickerAt(i + 1)}>
+                  + Inserir seção aqui
                 </button>
-              </li>
-            )}
-          </ul>
-        </section>
-
-        <QuoteBuilder company={company} sectors={sectors} services={services} quote={quote} setQuote={setQuote} />
+              )}
+            </div>
+          );
+        })}
         <SiteFooter company={company} logged={logged} onEdit={() => setEditing(true)} nav={footerNav} />
 
         <div className="cursor-label" ref={cursor} aria-hidden="true">
@@ -933,6 +1163,21 @@ export default function UsibarHome() {
             onSave={(co) => commit("Dados da empresa alterados", (c) => ({ ...c, company: { ...c.company, ...co } }))}
           />
         )}
+        {pickerAt !== null && (
+          <SectionPicker
+            missing={missing}
+            lenis={lenisRef.current}
+            onClose={() => setPickerAt(null)}
+            onPick={(b) => {
+              const at = pickerAt;
+              setPickerAt(null);
+              setLayout(isBuiltin(b.type) ? `Seção “${blockName(b)}” recolocada` : `Seção “${blockName(b)}” inserida`, (l) => [...l.slice(0, at), b, ...l.slice(at)]);
+              setTimeout(() => document.getElementById(blockDom(b))?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+            }}
+          />
+        )}
+        {curationOpen && <CurationPanel ai={aiStatus} lenis={lenisRef.current} onClose={() => setCurationOpen(false)} />}
+        {editing && <TextToolbar ai={aiStatus} />}
         {adminsOpen && <AdminsPanel lenis={lenisRef.current} onClose={() => setAdminsOpen(false)} />}
         {logged && (
           <EditBar
@@ -949,6 +1194,7 @@ export default function UsibarHome() {
             }}
             onAdd={() => setEditorPart({ ...blankPart })}
             onCompany={() => setCompanyOpen(true)}
+            onCurate={() => setCurationOpen(true)}
             onAdmins={accounts ? () => setAdminsOpen(true) : undefined}
             onLogout={async () => {
               await Promise.all([fetch("/api/auth", { method: "DELETE" }).catch(() => {}), signOut()]);

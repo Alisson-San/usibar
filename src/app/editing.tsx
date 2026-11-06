@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminCall, authFetch, changeMyPassword, type AdminRow } from "@/lib/browser-auth";
 
 export type Part = {
@@ -29,60 +29,7 @@ export const blankPart: Part = {
   imageUrl: "",
 };
 
-// Inline text field: plain text while viewing, contentEditable while editing.
-// The DOM text is managed imperatively so React never fights the caret.
-export function Editable({
-  value,
-  editing,
-  label,
-  onCommit,
-  className,
-}: {
-  value: string;
-  editing: boolean;
-  label: string;
-  onCommit: (v: string) => void;
-  className?: string;
-}) {
-  const ref = useRef<HTMLSpanElement>(null);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (el && document.activeElement !== el && el.textContent !== value)
-      el.textContent = value;
-  }, [value, editing]);
-  if (!editing) return <span className={className}>{value}</span>;
-  return (
-    <span
-      ref={ref}
-      className={(className ? className + " " : "") + "editable"}
-      contentEditable="plaintext-only"
-      suppressContentEditableWarning
-      role="textbox"
-      aria-label={label}
-      data-label={label}
-      spellCheck
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          e.currentTarget.blur();
-        }
-        if (e.key === "Escape") {
-          e.currentTarget.textContent = value;
-          e.currentTarget.blur();
-        }
-      }}
-      onBlur={(e) => {
-        const text = (e.currentTarget.textContent || "").replace(/\s+/g, " ").trim();
-        if (!text || text.length > 4000) e.currentTarget.textContent = value;
-        else if (text !== value) onCommit(text);
-      }}
-    />
-  );
-}
+export { Editable } from "./copy";
 
 // Body scroll lock, Escape to close and a focus trap for dialogs.
 export function useModal(
@@ -541,6 +488,7 @@ export function EditBar({
   onCompany,
   onAdmins,
   onAdd,
+  onCurate,
   onLogout,
 }: {
   editing: boolean;
@@ -554,6 +502,7 @@ export function EditBar({
   onCompany: () => void;
   onAdmins?: () => void;
   onAdd: () => void;
+  onCurate: () => void;
   onLogout: () => void;
 }) {
   const where = storageLabel[storage] ?? `em ${storage}`;
@@ -574,6 +523,8 @@ export function EditBar({
           <strong>Como editar</strong>
           <ul>
             <li>Textos com contorno tracejado: clique e digite. Enter confirma, Esc cancela.</li>
+            <li>Ao clicar num texto, uma barra permite mudar cor e tamanho e pedir sugestões à IA.</li>
+            <li>Cada seção tem controles para subir, descer, ocultar ou excluir; “+ Inserir seção” adiciona novas.</li>
             <li>Peças: clique no cartão para editar; “+ Nova peça” para cadastrar.</li>
             <li>Errou? Use “Desfazer” ou Ctrl+Z — vale também para exclusões.</li>
           </ul>
@@ -595,6 +546,9 @@ export function EditBar({
           </button>
           <button onClick={onAdd}>+ Nova peça</button>
           <button onClick={onCompany}>Empresa e contatos</button>
+          <button className="edit-ai" onClick={onCurate}>
+            ✦ Curadoria IA
+          </button>
           {onAdmins && <button onClick={onAdmins}>Administradores</button>}
         </>
       )}

@@ -131,3 +131,30 @@ test("reject unknown social network", () =>
   ));
 test("reject malformed text keys", () =>
   assert.equal(validData({ ...publicData, copy: { "<b>": "x" } }), false));
+test("accept text colours and sizes", () =>
+  assert.equal(validData({ ...publicData, styles: { "hero.title.1": { color: "#bf4f29", size: 1.2 } } }), true));
+test("reject style with script or odd size", () => {
+  assert.equal(validData({ ...publicData, styles: { a: { color: "red;background:url(x)" } } }), false);
+  assert.equal(validData({ ...publicData, styles: { a: { size: 40 } } }), false);
+  assert.equal(validData({ ...publicData, styles: { a: { color: "#000000", font: "x" } } }), false);
+});
+test("accept reordered built-in and template sections", () =>
+  assert.equal(
+    validData({
+      ...publicData,
+      layout: [
+        { id: "catalog", type: "catalog" },
+        { id: "a1b2c3", type: "stats", hidden: true, data: { title: "Números", items: [{ value: "20+", label: "anos" }] } },
+        { id: "x9", type: "text-image", data: { title: "T", imageUrl: "/assets/hero-bench.webp", side: "left" } },
+        { id: "quote", type: "quote" },
+      ],
+    }),
+    true,
+  ));
+test("reject unknown section fields, foreign photos and duplicates", () => {
+  assert.equal(validData({ ...publicData, layout: [{ id: "a", type: "cta", data: { onclick: "x" } }] }), false);
+  assert.equal(validData({ ...publicData, layout: [{ id: "a", type: "text-image", data: { imageUrl: "https://evil.com/a.webp" } }] }), false);
+  assert.equal(validData({ ...publicData, layout: [{ id: "quote", type: "quote" }, { id: "quote", type: "quote" }] }), false);
+  assert.equal(validData({ ...publicData, layout: [{ id: "x", type: "catalog" }] }), false);
+  assert.equal(validData({ ...publicData, layout: [{ id: "a", type: "iframe", data: {} }] }), false);
+});

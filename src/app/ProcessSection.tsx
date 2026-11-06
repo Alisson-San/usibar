@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type Lenis from "lenis";
@@ -11,8 +11,7 @@ import {
   sceneTimeline,
   type SceneTimeline,
 } from "./EngineeringScene";
-import { Editable } from "./editing";
-import { T } from "./copy";
+import { CopyContext, Editable, styleOf, T } from "./copy";
 
 export type Step = { label: string; title: string; copy: string };
 
@@ -41,16 +40,19 @@ function Words({ text, kind }: { text: string; kind: "w" | "t" }) {
 }
 
 export function ProcessSection({
+  num,
   steps,
   editing,
   lenis,
   onEdit,
 }: {
+  num: string;
   steps: Step[];
   editing: boolean;
   lenis: React.RefObject<Lenis | null>;
   onEdit: (index: number, key: keyof Step, value: string) => void;
 }) {
+  const { styles } = useContext(CopyContext);
   const section = useRef<HTMLElement>(null),
     frame = useRef<HTMLDivElement>(null),
     rail = useRef<HTMLDivElement>(null),
@@ -135,17 +137,20 @@ export function ProcessSection({
         value={steps[i][key]}
         editing
         label={`Etapa ${i + 1} — ${label}`}
+        styleKey={`process.${i}.${key}`}
         onCommit={(v) => onEdit(i, key, v)}
       />
     ) : (
-      <Words text={steps[i][key]} kind={kind} />
+      <span style={styleOf(styles[`process.${i}.${key}`])}>
+        <Words text={steps[i][key]} kind={kind} />
+      </span>
     );
 
   return (
     <section id="processo" className="manufacturing" ref={section}>
       <div className="process-top eyebrow">
         <span>
-          <T k="process.eyebrow" d="02 — DO DESENHO À PEÇA" label="Processo — rótulo" />
+          {num} — <T k="process.eyebrow" d="DO DESENHO À PEÇA" label="Processo — rótulo" />
         </span>
         <a href="#pecas" className="skip-scene">
           <T k="process.skip" d="Pular animação" label="Processo — pular" /> ↓
