@@ -3557,6 +3557,7 @@ body {
 /* Reading gutter on wide screens: content never runs under the rail. */
 @media (min-width: 1100px) {
   .block > section,
+  .block > .pin-host > section,
   .site-footer {
     padding-right: calc(4% + 92px);
   }
@@ -3820,7 +3821,8 @@ body {
 .block {
   position: relative;
 }
-.block.is-hidden > section {
+.block.is-hidden > section,
+.block.is-hidden > .pin-host {
   opacity: 0.45;
   filter: grayscale(0.6);
 }
@@ -4289,4 +4291,10 @@ body {
   .wa-float > span {
     display: none;
   }
+}
+/* The process section's pin spacer is our own element (see ProcessSection): GSAP copies the
+   section's flex display and a measured width onto it, which would shrink the section. */
+.pin-host {
+  display: block !important;
+  width: auto !important;
 }
