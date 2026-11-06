@@ -111,6 +111,10 @@ Credenciais, uploads locais, dependências, ferramentas e builds estão excluíd
 
 Nenhum repositório remoto ou deployment foi criado nesta preparação.
 
+## Fluxo de branches
+
+`main` é produção (domínio oficial na Vercel) e `develop` é o ambiente de testes. Alterações saem de branches `feature/…` para a `develop` e, aprovadas, vão da `develop` para a `main`. O CI (`.github/workflows/ci.yml`) roda testes, tipos e build em cada PR. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Validação
 
 `npm test`: testes da IA (validação de pedidos e respostas, chat e chamadas de função), das ações do assistente (cada ação aplicada mantém o conteúdo válido), de estilos e seções, de validação, sessão local de desenvolvimento, modo demonstração e armazenamento (arquivo e Supabase, com respostas simuladas, incluindo a verificação de administrador). `USIBAR_STORAGE=file node --env-file=.env.local tests/integration.mjs`: integração local (modo arquivo) (servidor em 3000; cria e restaura dados de teste). `node tests/demo-integration.mjs`: leitura pública e bloqueio de alterações no servidor de demonstração em 3002.
