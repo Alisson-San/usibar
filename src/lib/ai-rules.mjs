@@ -123,3 +123,83 @@ export function companyFacts(content) {
   ];
   return lines.filter(Boolean).join("\n");
 }
+
+// ---- Google Gemini (REST generateContent) ---------------------------------------------
+export const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite";
+
+// JSON shapes the model must answer with (OpenAPI-style schema used by responseSchema).
+export const REWRITE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    text: { type: "STRING", description: "O texto proposto, pronto para publicar." },
+    note: { type: "STRING", description: "Uma frase curta explicando o que mudou." },
+  },
+  required: ["text", "note"],
+};
+export const REVIEW_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    summary: { type: "STRING", description: "Avaliação geral da página em até três frases." },
+    suggestions: {
+      type: "ARRAY",
+      description: "Somente os textos que realmente precisam mudar.",
+      items: {
+        type: "OBJECT",
+        properties: {
+          key: { type: "STRING", description: "A chave exata do texto revisado." },
+          issue: { type: "STRING", description: "O problema encontrado, em uma frase." },
+          suggestion: { type: "STRING", description: "O texto completo proposto para substituir o original." },
+        },
+        required: ["key", "issue", "suggestion"],
+      },
+    },
+  },
+  required: ["summary", "suggestions"],
+};
+
+export function geminiRequest({ system, prompt, schema, maxTokens }) {
+  return {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: schema,
+      maxOutputTokens: maxTokens,
+      temperature: 0.4,
+    },
+  };
+}
+
+const fail = (message, status) => Object.assign(Error(message), { status });
+
+/** Reads a generateContent response into the parsed JSON answer, or throws a user-facing error. */
+export function readGemini(data) {
+  const block = data?.promptFeedback?.blockReason;
+  const candidate = data?.candidates?.[0];
+  if (!candidate) throw fail(block ? "A IA não pôde atender este pedido." : "A IA não devolveu resposta.", block ? 422 : 502);
+  const reason = candidate.finishReason;
+  if (["SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII"].includes(reason))
+    throw fail("A IA não pôde atender este pedido.", 422);
+  const text = (candidate.content?.parts ?? [])
+    .filter((p) => typeof p.text === "string" && !p.thought)
+    .map((p) => p.text)
+    .join("")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  if (!text) throw fail(reason === "MAX_TOKENS" ? "A resposta da IA veio incompleta. Tente de novo." : "A IA não devolveu texto.", 502);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw fail("A resposta da IA veio incompleta. Tente de novo.", 502);
+  }
+}
+
+/** Translates an HTTP error from the Gemini API into a message for the editor. */
+export function geminiError(status, body, model) {
+  const msg = String(body?.error?.message ?? "");
+  if (/api key/i.test(msg) || status === 401 || status === 403) return { status: 503, error: "A chave do Gemini (GEMINI_API_KEY) foi recusada. Confira a chave no Google AI Studio." };
+  if (status === 404) return { status: 503, error: `O modelo “${model}” não foi encontrado. Ajuste GEMINI_MODEL.` };
+  if (status === 429) return { status: 429, error: "A cota do Gemini acabou ou há muitos pedidos agora. Tente em instantes." };
+  return { status: 502, error: `O Gemini respondeu com erro (${status}).` };
+}

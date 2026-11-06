@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   if (!(await authorize(req)).ok) return NextResponse.json({ error: "Sessão expirada. Entre novamente." }, { status: 401 });
   if (!aiConfigured())
     return NextResponse.json(
-      { error: "A IA ainda não está configurada. Defina ANTHROPIC_API_KEY nas variáveis de ambiente do servidor." },
+      { error: "A IA ainda não está configurada. Defina GEMINI_API_KEY nas variáveis de ambiente do servidor." },
       { status: 503 },
     );
   if (!allow()) return NextResponse.json({ error: "Muitos pedidos à IA em pouco tempo. Aguarde um minuto." }, { status: 429 });

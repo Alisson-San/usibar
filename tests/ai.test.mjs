@@ -61,3 +61,26 @@ test("facts come from the saved content", () => {
   assert.match(facts, /Barão\/RS/);
   assert.match(facts, /Cilindros/);
 });
+import { geminiError, geminiRequest, readGemini, REWRITE_SCHEMA } from "../src/lib/ai-rules.mjs";
+
+test("Gemini request asks for JSON with the fixed schema", () => {
+  const body = geminiRequest({ system: "S", prompt: "P", schema: REWRITE_SCHEMA, maxTokens: 100 });
+  assert.equal(body.systemInstruction.parts[0].text, "S");
+  assert.equal(body.contents[0].parts[0].text, "P");
+  assert.equal(body.generationConfig.responseMimeType, "application/json");
+  assert.deepEqual(body.generationConfig.responseSchema.required, ["text", "note"]);
+});
+test("Gemini answer is parsed, skipping thoughts and code fences", () => {
+  const data = { candidates: [{ finishReason: "STOP", content: { parts: [{ text: "pensando", thought: true }, { text: '```json\n{"text":"Novo","note":"ok"}\n```' }] } }] };
+  assert.deepEqual(readGemini(data), { text: "Novo", note: "ok" });
+});
+test("Gemini blocks and truncations become clear errors", () => {
+  assert.throws(() => readGemini({ promptFeedback: { blockReason: "SAFETY" } }), /não pôde atender/);
+  assert.throws(() => readGemini({ candidates: [{ finishReason: "SAFETY", content: { parts: [] } }] }), /não pôde atender/);
+  assert.throws(() => readGemini({ candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [{ text: '{"text":"Nov' }] } }] }), /incompleta/);
+});
+test("Gemini HTTP errors explain what to fix", () => {
+  assert.match(geminiError(400, { error: { message: "API key not valid. Please pass a valid API key." } }, "m").error, /GEMINI_API_KEY/);
+  assert.match(geminiError(404, {}, "gemini-x").error, /GEMINI_MODEL/);
+  assert.equal(geminiError(429, {}, "m").status, 429);
+});

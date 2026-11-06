@@ -168,7 +168,7 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
         <div className="tt-panel">
           {!ai?.configured ? (
             <p className="tt-note">
-              A IA ainda não está configurada. Defina <code>ANTHROPIC_API_KEY</code> nas variáveis de ambiente do servidor e recarregue.
+              A IA ainda não está configurada. Defina <code>GEMINI_API_KEY</code> nas variáveis de ambiente do servidor e recarregue.
             </p>
           ) : (
             <>
@@ -268,7 +268,7 @@ export function CurationPanel({ ai, lenis, onClose }: { ai: AiStatus; lenis: { s
           <div className="curation-intro">
             <h2>A IA ainda não está configurada.</h2>
             <p>
-              Defina <code>ANTHROPIC_API_KEY</code> nas variáveis de ambiente do servidor (na Vercel: Settings → Environment Variables) e publique de novo. A edição
+              Defina <code>GEMINI_API_KEY</code> nas variáveis de ambiente do servidor (na Vercel: Settings → Environment Variables) e publique de novo. A edição
               continua funcionando normalmente sem ela.
             </p>
           </div>

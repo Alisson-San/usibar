@@ -1,48 +1,43 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
-import * as z from "zod/v4";
-import { FIELD_ACTIONS, acceptReview, acceptRewrite, systemPrompt } from "./ai-rules.mjs";
+import {
+  FIELD_ACTIONS,
+  GEMINI_DEFAULT_MODEL,
+  REVIEW_SCHEMA,
+  REWRITE_SCHEMA,
+  acceptReview,
+  acceptRewrite,
+  geminiError,
+  geminiRequest,
+  readGemini,
+  systemPrompt,
+} from "./ai-rules.mjs";
 
-// Server-only. The key is read from ANTHROPIC_API_KEY when the route runs, so the site works
-// (with the assistant switched off) until the key is configured.
-export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
-export const aiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY);
+// Server-only. The Google Gemini key is read from GEMINI_API_KEY (or GOOGLE_API_KEY) when the
+// route runs, so the site works, with the assistant switched off, until the key is configured.
+export const MODEL = process.env.GEMINI_MODEL || GEMINI_DEFAULT_MODEL;
+const apiKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
+export const aiConfigured = () => Boolean(apiKey());
+// Overridable only to point tests at a local stand-in for the API.
+const BASE = (process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
 
-const Rewrite = z.object({
-  text: z.string().describe("O texto proposto, pronto para publicar."),
-  note: z.string().describe("Uma frase curta explicando o que mudou."),
-});
-const Review = z.object({
-  summary: z.string().describe("Avaliação geral da página em até três frases."),
-  suggestions: z
-    .array(
-      z.object({
-        key: z.string().describe("A chave exata do texto revisado."),
-        issue: z.string().describe("O problema encontrado, em uma frase."),
-        suggestion: z.string().describe("O texto completo proposto para substituir o original."),
-      }),
-    )
-    .describe("Somente os textos que realmente precisam mudar."),
-});
-
-let client: Anthropic | null = null;
-const anthropic = () => (client ??= new Anthropic({ timeout: 90_000, maxRetries: 1 }));
-
-async function ask<T extends z.ZodType>(schema: T, facts: string, prompt: string, maxTokens: number) {
-  const response = await anthropic().beta.messages.parse({
-    model: MODEL,
-    max_tokens: maxTokens,
-    // A safety decline is retried on Anthropic's recommended model instead of failing the edit.
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    output_config: { effort: "medium", format: betaZodOutputFormat(schema) },
-    system: systemPrompt(facts),
-    messages: [{ role: "user", content: prompt }],
-  });
-  if (response.stop_reason === "refusal") throw Object.assign(Error("A IA não pôde atender este pedido."), { status: 422 });
-  if (response.stop_reason === "max_tokens" || !response.parsed_output)
-    throw Object.assign(Error("A resposta da IA veio incompleta. Tente de novo."), { status: 502 });
-  return response.parsed_output as z.infer<T>;
+async function ask(schema: object, facts: string, prompt: string, maxTokens: number) {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey() },
+      body: JSON.stringify(geminiRequest({ system: systemPrompt(facts), prompt, schema, maxTokens })),
+      signal: AbortSignal.timeout(90_000),
+      cache: "no-store",
+    });
+  } catch {
+    throw Object.assign(Error("Não foi possível falar com o Gemini agora."), { status: 502 });
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const { status, error } = geminiError(res.status, body, MODEL);
+    throw Object.assign(Error(error), { status, detail: body?.error?.message });
+  }
+  return readGemini(body);
 }
 
 export async function rewriteField(
@@ -58,7 +53,7 @@ export async function rewriteField(
   ]
     .filter(Boolean)
     .join("\n\n");
-  const out = acceptRewrite(await ask(Rewrite, facts, prompt, 4000), req.text);
+  const out = acceptRewrite(await ask(REWRITE_SCHEMA, facts, prompt, 8192), req.text);
   if (!out) throw Object.assign(Error("A IA não devolveu um texto utilizável."), { status: 502 });
   return out;
 }
@@ -71,14 +66,10 @@ export async function reviewPage(fields: { key: string; label: string; text: str
     "Textos:",
     list,
   ].join("\n\n");
-  return acceptReview(await ask(Review, facts, prompt, 16000), fields);
+  return acceptReview(await ask(REVIEW_SCHEMA, facts, prompt, 32768), fields);
 }
 
 export function aiError(e: unknown): { status: number; error: string } {
-  if (e instanceof Anthropic.AuthenticationError) return { status: 503, error: "A chave da IA (ANTHROPIC_API_KEY) foi recusada." };
-  if (e instanceof Anthropic.RateLimitError) return { status: 429, error: "A IA está com muitas solicitações agora. Tente em instantes." };
-  if (e instanceof Anthropic.APIConnectionError) return { status: 502, error: "Não foi possível falar com a IA agora." };
-  if (e instanceof Anthropic.APIError) return { status: 502, error: `A IA respondeu com erro (${e.status}).` };
   const status = (e as { status?: number }).status;
   if (status) return { status, error: (e as Error).message };
   return { status: 500, error: "Falha inesperada na IA." };
