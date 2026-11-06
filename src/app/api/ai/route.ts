@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { authorize, sameOrigin } from "@/lib/auth";
 import { bundled, store } from "@/lib/content";
 import { isDemo } from "@/lib/runtime.mjs";
-import { aiConfigured, aiError, MODEL, reviewPage, rewriteField } from "@/lib/ai";
+import { aiConfigured, aiError, chatTurn, MODEL, reviewPage, rewriteField } from "@/lib/ai";
 import { companyFacts, rateLimiter, validateAiRequest } from "@/lib/ai-rules.mjs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +29,8 @@ export async function POST(req: Request) {
   let body: unknown;
   try {
     const raw = await req.text();
-    if (raw.length > 200_000) return NextResponse.json({ error: "Solicitação grande demais." }, { status: 413 });
+    // Chat turns may carry photos (resized in the browser); everything else is text.
+    if (raw.length > 3_500_000) return NextResponse.json({ error: "Solicitação grande demais. Envie fotos menores." }, { status: 413 });
     body = JSON.parse(raw);
   } catch {
     return NextResponse.json({ error: "Solicitação inválida." }, { status: 400 });
@@ -40,7 +41,12 @@ export async function POST(req: Request) {
   const facts = companyFacts(await store().read().catch(() => bundled));
   try {
     const { value } = parsed;
-    const result = value.action === "review" ? await reviewPage(value.fields, facts) : await rewriteField(value, facts);
+    const result =
+      value.action === "chat"
+        ? await chatTurn(value, facts)
+        : value.action === "review"
+          ? await reviewPage(value.fields, facts)
+          : await rewriteField(value, facts);
     return NextResponse.json(result);
   } catch (e) {
     const { status, error } = aiError(e);

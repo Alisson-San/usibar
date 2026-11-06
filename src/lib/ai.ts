@@ -5,12 +5,17 @@ import {
   REWRITE_SCHEMA,
   acceptReview,
   acceptRewrite,
+  chatSystemPrompt,
+  geminiChatRequest,
   geminiError,
   geminiRequest,
   readGemini,
+  readGeminiChat,
+  siteState,
   systemPrompt,
 } from "./ai-rules.mjs";
 import { networkProblem } from "./net.mjs";
+import { acceptActions } from "./site-actions.mjs";
 
 // Server-only. The Google Gemini key is read from GEMINI_API_KEY (or GOOGLE_API_KEY) when the
 // route runs, so the site works, with the assistant switched off, until the key is configured.
@@ -20,13 +25,13 @@ export const aiConfigured = () => Boolean(apiKey());
 // Overridable only to point tests at a local stand-in for the API.
 const BASE = (process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
 
-async function ask(schema: object, facts: string, prompt: string, maxTokens: number) {
+async function generate(request: object) {
   let res: Response;
   try {
     res = await fetch(`${BASE}/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey() },
-      body: JSON.stringify(geminiRequest({ system: systemPrompt(facts), prompt, schema, maxTokens })),
+      body: JSON.stringify(request),
       signal: AbortSignal.timeout(90_000),
       cache: "no-store",
     });
@@ -42,8 +47,11 @@ async function ask(schema: object, facts: string, prompt: string, maxTokens: num
     const { status, error } = geminiError(res.status, body, MODEL);
     throw Object.assign(Error(error), { status, detail: body?.error?.message });
   }
-  return readGemini(body);
+  return body;
 }
+
+const ask = async (schema: object, facts: string, prompt: string, maxTokens: number) =>
+  readGemini(await generate(geminiRequest({ system: systemPrompt(facts), prompt, schema, maxTokens })));
 
 export async function rewriteField(
   req: { action: keyof typeof FIELD_ACTIONS; text: string; label: string; instruction: string },
@@ -72,6 +80,18 @@ export async function reviewPage(fields: { key: string; label: string; text: str
     list,
   ].join("\n\n");
   return acceptReview(await ask(REVIEW_SCHEMA, facts, prompt, 32768), fields);
+}
+
+type ChatMessage = { role: "user" | "assistant"; text?: string; images?: { mimeType: string; data: string }[] };
+type Site = { sections: unknown[]; products: unknown[]; images: unknown[]; attachments: unknown[]; company: Record<string, string>; socials?: unknown[] };
+type Text = { key: string; label: string; text: string };
+
+// One turn of the editing chat: the reply plus the actions proposed, already checked against the site.
+export async function chatTurn(req: { messages: ChatMessage[]; site: Site; texts: Text[] }, facts: string) {
+  const system = chatSystemPrompt(facts, siteState(req.site, req.texts));
+  const { text, calls } = readGeminiChat(await generate(geminiChatRequest({ system, messages: req.messages })));
+  const { actions, dropped } = acceptActions(calls, req.site as Parameters<typeof acceptActions>[1], req.texts);
+  return { reply: text, actions, dropped };
 }
 
 export function aiError(e: unknown): { status: number; error: string } {

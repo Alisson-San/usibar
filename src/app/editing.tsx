@@ -524,6 +524,7 @@ export function EditBar({
           <ul>
             <li>Textos com contorno tracejado: clique e digite. Enter confirma, Esc cancela.</li>
             <li>Ao clicar num texto, uma barra permite mudar cor e tamanho e pedir sugestões à IA.</li>
+            <li>“✦ Assistente IA” abre um chat: peça em palavras (mover seções, trocar fotos, cadastrar peças…) e aplique com um clique.</li>
             <li>Cada seção tem controles para subir, descer, ocultar ou excluir; “+ Inserir seção” adiciona novas.</li>
             <li>Peças: clique no cartão para editar; “+ Nova peça” para cadastrar.</li>
             <li>Errou? Use “Desfazer” ou Ctrl+Z — vale também para exclusões.</li>
@@ -547,7 +548,7 @@ export function EditBar({
           <button onClick={onAdd}>+ Nova peça</button>
           <button onClick={onCompany}>Empresa e contatos</button>
           <button className="edit-ai" onClick={onCurate}>
-            ✦ Curadoria IA
+            ✦ Assistente IA
           </button>
           {onAdmins && <button onClick={onAdmins}>Administradores</button>}
         </>

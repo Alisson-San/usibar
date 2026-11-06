@@ -1,3 +1,5 @@
+import { BUILTIN_TYPES, CHAT_TOOLS, COMPANY_FIELDS, SOCIALS, TEMPLATE_TYPES, TYPE_NAMES } from "./site-actions.mjs";
+
 // Rules for the AI copy assistant that do not depend on the model client: what a request may
 // contain, and what of the model's answer may reach the editor. The assistant only proposes;
 // the admin decides and nothing is published without a click.
@@ -18,6 +20,7 @@ const keyOk = (k) => typeof k === "string" && /^[a-z0-9][a-z0-9._-]{0,79}$/i.tes
 /** @returns {{ ok: true, value: any } | { ok: false, error: string }} */
 export function validateAiRequest(body) {
   if (!body || typeof body !== "object") return { ok: false, error: "Solicitação inválida." };
+  if (body.action === "chat") return validateChatRequest(body);
   if (body.action === "review") {
     const fields = body.fields;
     if (!Array.isArray(fields) || fields.length === 0 || fields.length > LIMITS.fields)
@@ -202,4 +205,147 @@ export function geminiError(status, body, model) {
   if (status === 404) return { status: 503, error: `O modelo “${model}” não foi encontrado. Ajuste GEMINI_MODEL.` };
   if (status === 429) return { status: 429, error: "A cota do Gemini acabou ou há muitos pedidos agora. Tente em instantes." };
   return { status: 502, error: `O Gemini respondeu com erro (${status}).` };
+}
+
+// ---- Chat: the admin asks in plain words; the model answers and proposes site actions ----------
+
+// Photos are resized in the browser (about 100–250 KB each in base64); 8 fit well under Vercel's 4.5 MB body limit.
+const CHAT = { messages: 40, text: 6000, images: 8, image: 900_000, sections: 30, products: 200, targets: 80, attachments: 12 };
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const shortStr = (v, max) => typeof v === "string" && v.length <= max;
+
+/** @returns {{ ok: true, value: any } | { ok: false, error: string }} */
+export function validateChatRequest(body) {
+  const bad = (error) => ({ ok: false, error });
+  const { messages, site, texts } = body;
+  if (!Array.isArray(messages) || !messages.length || messages.length > CHAT.messages) return bad("Conversa vazia ou longa demais. Comece uma conversa nova.");
+  let images = 0;
+  for (const m of messages) {
+    if (!m || !["user", "assistant"].includes(m.role) || !shortStr(m.text ?? "", CHAT.text)) return bad("Alguma mensagem da conversa é inválida.");
+    for (const img of m.images ?? []) {
+      images++;
+      if (!img || !IMAGE_TYPES.includes(img.mimeType) || !shortStr(img.data, CHAT.image) || !/^[A-Za-z0-9+/]+=*$/.test(img.data))
+        return bad("Alguma foto da conversa é inválida.");
+    }
+    if (!(m.text ?? "").trim() && !(m.images ?? []).length) return bad("Mensagem vazia.");
+  }
+  if (images > CHAT.images) return bad("Fotos demais na conversa. Comece uma conversa nova.");
+  if (messages[messages.length - 1].role !== "user") return bad("A última mensagem deve ser sua.");
+  if (!site || typeof site !== "object") return bad("Estado do site ausente.");
+  const list = (v, max, check) => Array.isArray(v) && v.length <= max && v.every((x) => x && check(x));
+  const types = [...BUILTIN_TYPES, ...TEMPLATE_TYPES];
+  const ok =
+    list(site.sections, CHAT.sections, (b) => shortStr(b.id, 40) && types.includes(b.type) && shortStr(b.name, 80) && typeof b.hidden === "boolean") &&
+    list(site.products, CHAT.products, (p) => shortStr(p.id, 80) && shortStr(p.code, 40) && shortStr(p.title, 200) && shortStr(p.category, 20) && typeof p.featured === "boolean") &&
+    list(site.images, CHAT.targets, (i) => shortStr(i.target, 120) && shortStr(i.label, 120)) &&
+    list(site.attachments, CHAT.attachments, (a) => /^foto-\d{1,2}$/.test(a.id) && shortStr(a.name, 120)) &&
+    list(site.socials ?? [], 10, (x) => SOCIALS.includes(x.network) && shortStr(x.url, 300)) &&
+    site.company &&
+    typeof site.company === "object" &&
+    Object.entries(site.company).every(([k, v]) => k in COMPANY_FIELDS && shortStr(v, 4000));
+  if (!ok) return bad("O estado do site enviado é inválido.");
+  const review = validateAiRequest({ action: "review", fields: texts });
+  if (!review.ok) return review;
+  return { ok: true, value: { action: "chat", messages: messages.slice(-30), site, texts } };
+}
+
+// The site as the model sees it: ids it may use in calls, and the current texts.
+export function siteState(site, texts) {
+  const lines = ["SEÇÕES (na ordem da página):"];
+  site.sections.forEach((b, i) => {
+    const kind = BUILTIN_TYPES.includes(b.type) ? "fixa" : `modelo ${TYPE_NAMES[b.type]}`;
+    lines.push(`${i + 1}. [${b.id}] ${b.name} (${kind}${b.hidden ? ", oculta" : ""})`);
+  });
+  const missing = BUILTIN_TYPES.filter((t) => !site.sections.some((b) => b.type === t));
+  if (missing.length) lines.push(`Seções fixas fora da página (podem ser recolocadas com add_section): ${missing.join(", ")}`);
+  lines.push("", "PEÇAS DO CATÁLOGO:");
+  for (const p of site.products) lines.push(`[${p.id}] ${p.code} · ${p.title} · ${p.category}${p.featured ? " · destaque" : ""}`);
+  lines.push("", "EMPRESA E CONTATO:");
+  for (const [k, v] of Object.entries(site.company)) lines.push(`${k} (${COMPANY_FIELDS[k][0]}): ${v}`);
+  if (site.socials?.length) lines.push(`Redes: ${site.socials.map((x) => `${x.network} ${x.url}`).join("; ")}`);
+  lines.push("", "FOTOS QUE PODEM SER TROCADAS (alvo — onde fica):");
+  for (const i of site.images) lines.push(`${i.target} — ${i.label}`);
+  lines.push("", "FOTOS ANEXADAS NESTA CONVERSA:");
+  lines.push(site.attachments.length ? site.attachments.map((a) => `${a.id} (${a.name})`).join("; ") : "nenhuma");
+  lines.push("", "TEXTOS (chave — onde fica: texto atual):");
+  for (const t of texts) lines.push(`[${t.key}] ${t.label}: ${t.text}`);
+  return lines.join("\n");
+}
+
+export function chatSystemPrompt(facts, state) {
+  return [
+    "Você é o assistente de edição do site institucional da Usibar Usinagens Especiais, fabricante de cilindros hidráulicos, blocos hidráulicos (manifolds) e peças usinadas em CNC sob medida.",
+    "Você conversa com o administrador do site e o ajuda a editar tudo o que é possível: textos, cor e tamanho dos textos, seções (inserir, mover, ocultar, remover, renomear), fotos, peças do catálogo, dados de contato e redes sociais.",
+    "Como agir:",
+    "- Para mudar o site, chame as funções. Cada chamada vira uma ação que o administrador confirma com um clique; nada muda sem ele, e tudo pode ser desfeito. Junto das chamadas, escreva uma frase curta dizendo o que preparou.",
+    "- Use só ids de seção, ids de peça, chaves de texto, alvos de foto e fotos anexadas que aparecem no ESTADO DO SITE. Nunca invente ids nem chaves.",
+    "- Se o pedido for ambíguo (qual seção, qual peça, qual foto, qual texto), pergunte antes, em uma frase, sem chamar funções.",
+    "- Foto anexada sem instrução: descreva em uma frase o que vê e ofereça opções (cadastrar como peça nova, trocar a foto do topo ou de uma peça, usar numa seção ou galeria).",
+    "- Ao cadastrar uma peça pela foto: nome e descrição curtos a partir do que se vê; não invente medidas, pressões, materiais, normas ou aplicações. Sem código informado, proponha o próximo no padrão dos códigos existentes. Se o fundo da foto for poluído, use remove_background.",
+    "- Para revisar todos os textos de uma vez, chame review_texts. Para mostrar algo, chame show_on_site.",
+    "- Você não altera senhas nem administradores, não muda o desenho do site além de cor e tamanho dos textos e não publica nada fora do site. Diga isso com gentileza quando pedirem.",
+    "- Se o administrador perguntar o que você sabe fazer, dê exemplos práticos de pedidos.",
+    "Textos:",
+    "- Português do Brasil, tom profissional, técnico e claro, para compradores industriais.",
+    "- Use apenas os fatos abaixo e o próprio site. Não invente números, prazos, certificações, normas, clientes, garantias ou capacidades.",
+    "- Preserve nomes próprios, códigos de peça e unidades. Rótulos e títulos curtos continuam curtos.",
+    "- Suas respostas: curtas e diretas, texto puro sem markdown; listas simples com “- ” quando ajudar.",
+    "Fatos da empresa:",
+    facts,
+    "",
+    "ESTADO DO SITE AGORA:",
+    state,
+  ].join("\n");
+}
+
+export function geminiChatRequest({ system, messages, maxTokens = 8192 }) {
+  const contents = [];
+  for (const m of messages) {
+    const role = m.role === "assistant" ? "model" : "user";
+    if (!contents.length && role === "model") continue; // the conversation must start with the admin
+    const parts = [];
+    if ((m.text ?? "").trim()) parts.push({ text: m.text });
+    for (const img of m.images ?? []) parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+    const last = contents[contents.length - 1];
+    if (last?.role === role) last.parts.push(...parts);
+    else contents.push({ role, parts });
+  }
+  return {
+    systemInstruction: { parts: [{ text: system }] },
+    contents,
+    tools: [{ functionDeclarations: CHAT_TOOLS }],
+    toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+    generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 },
+  };
+}
+
+// Chat replies keep their line breaks; markdown emphasis would show up literally.
+const cleanReply = (s) =>
+  String(s)
+    .replace(/\*\*|__|`/g, "")
+    .replace(/^#+\s*/gm, "")
+    .replace(/^\s*\*\s+/gm, "- ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 4000);
+
+/** Reads a chat turn: the reply text and the function calls the model made. */
+export function readGeminiChat(data) {
+  const block = data?.promptFeedback?.blockReason;
+  const candidate = data?.candidates?.[0];
+  if (!candidate) throw fail(block ? "A IA não pôde atender este pedido." : "A IA não devolveu resposta.", block ? 422 : 502);
+  const reason = candidate.finishReason;
+  if (["SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFETY"].includes(reason)) throw fail("A IA não pôde atender este pedido.", 422);
+  if (["MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL"].includes(reason)) throw fail("A IA montou uma ação inválida. Tente pedir de outro jeito.", 502);
+  const parts = candidate.content?.parts ?? [];
+  const text = cleanReply(
+    parts
+      .filter((p) => typeof p.text === "string" && !p.thought)
+      .map((p) => p.text)
+      .join(""),
+  );
+  const calls = parts.filter((p) => p.functionCall?.name).map((p) => ({ name: p.functionCall.name, args: p.functionCall.args ?? {} }));
+  if (!text && !calls.length) throw fail(reason === "MAX_TOKENS" ? "A resposta da IA veio incompleta. Tente de novo." : "A IA não devolveu resposta.", 502);
+  return { text, calls };
 }

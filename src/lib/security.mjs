@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { BUILTIN_TYPES, TEMPLATE_FIELDS } from "./site-actions.mjs";
 export const equal = (a, b) => {
   const x = Buffer.from(String(a)),
     y = Buffer.from(String(b));
@@ -197,16 +198,8 @@ function validStyles(styles) {
   );
 }
 
-export const BUILTIN_SECTIONS = ["solutions", "process", "catalog", "origin", "sectors", "quote"];
+export const BUILTIN_SECTIONS = BUILTIN_TYPES;
 const opt = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
-// Fields allowed in each template section and their limits; anything else is refused.
-const TEMPLATE_FIELDS = {
-  "text-image": { nav: 40, eyebrow: 80, title: 160, accent: 160, text: 1500, cta: 60, side: 5, imageUrl: "image" },
-  stats: { nav: 40, eyebrow: 80, title: 160, items: "items" },
-  gallery: { nav: 40, eyebrow: 80, title: 160, images: "images" },
-  cta: { nav: 40, title: 160, text: 600, button: 60 },
-  testimonial: { nav: 40, quote: 1200, author: 120, role: 160 },
-};
 function validLayout(layout, image) {
   if (!Array.isArray(layout) || layout.length > 30) return false;
   const ids = new Set();
