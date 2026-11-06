@@ -84,3 +84,87 @@ test("Gemini HTTP errors explain what to fix", () => {
   assert.match(geminiError(404, {}, "gemini-x").error, /GEMINI_MODEL/);
   assert.equal(geminiError(429, {}, "m").status, 429);
 });
+
+// ---- Chat -------------------------------------------------------------------------------------
+import { chatSystemPrompt, geminiChatRequest, readGeminiChat, siteState, validateChatRequest } from "../src/lib/ai-rules.mjs";
+
+const chatSite = {
+  sections: [{ id: "solutions", type: "solutions", name: "Soluções", hidden: false }, { id: "abc123", type: "testimonial", name: "Depoimento", hidden: true }],
+  products: [{ id: "cil-1", code: "USB-CH-01", title: "Cilindro", category: "cilindros", featured: true }],
+  company: { phoneDisplay: "(51) 3696-9839", whatsapp: "555136969839" },
+  socials: [{ network: "instagram", url: "https://instagram.com/usibar" }],
+  images: [{ target: "hero", label: "a foto do topo" }],
+  attachments: [{ id: "foto-1", name: "peca.jpg" }],
+};
+const chatTexts = [{ key: "hero.title.1", label: "Topo — título", text: "Componentes hidráulicos" }];
+const chatBody = (messages, extra = {}) => ({ action: "chat", messages, site: chatSite, texts: chatTexts, ...extra });
+
+test("chat requests: conversation, photos and site state are checked", () => {
+  const photo = { mimeType: "image/jpeg", data: "QUJD" };
+  assert.equal(validateAiRequest(chatBody([{ role: "user", text: "Cadastre esta peça", images: [photo] }])).ok, true);
+  assert.equal(validateAiRequest(chatBody([{ role: "user", text: "", images: [photo] }])).ok, true);
+  assert.equal(validateAiRequest(chatBody([{ role: "user", text: "oi" }, { role: "assistant", text: "Olá" }])).ok, false, "last must be the admin");
+  assert.equal(validateAiRequest(chatBody([{ role: "user", text: "x", images: [{ mimeType: "image/svg+xml", data: "QUJD" }] }])).ok, false);
+  assert.equal(validateAiRequest(chatBody([{ role: "user", text: "x", images: [{ mimeType: "image/png", data: "<script>" }] }])).ok, false);
+  assert.equal(validateAiRequest(chatBody([{ role: "user", text: "x" }], { site: { ...chatSite, company: { senha: "x" } } })).ok, false);
+  assert.equal(validateAiRequest(chatBody([{ role: "system", text: "x" }])).ok, false);
+  const long = Array.from({ length: 41 }, () => ({ role: "user", text: "x" }));
+  assert.equal(validateAiRequest(chatBody(long)).ok, false);
+});
+
+test("the model sees the ids it may use, and the rules", () => {
+  const state = siteState(chatSite, chatTexts);
+  for (const s of ["1. [solutions] Soluções (fixa)", "[abc123] Depoimento (modelo Depoimento, oculta)", "[cil-1] USB-CH-01", "hero — a foto do topo", "foto-1 (peca.jpg)", "[hero.title.1] Topo — título: Componentes hidráulicos", "recolocadas com add_section): process"])
+    assert.ok(state.includes(s), s);
+  const prompt = chatSystemPrompt("Nome: Usibar", state);
+  assert.match(prompt, /Nunca invente ids/);
+  assert.match(prompt, /Não invente números/);
+});
+
+test("chat request carries tools, merges turns and sends photos inline", () => {
+  const req = geminiChatRequest({
+    system: "S",
+    messages: [
+      { role: "assistant", text: "Olá! Como posso ajudar?" },
+      { role: "user", text: "Use esta foto", images: [{ mimeType: "image/webp", data: "QUJD" }] },
+      { role: "user", text: "no topo" },
+    ],
+  });
+  assert.equal(req.contents.length, 1, "leading assistant turn skipped, user turns merged");
+  assert.deepEqual(req.contents[0].parts[1], { inlineData: { mimeType: "image/webp", data: "QUJD" } });
+  assert.ok(req.tools[0].functionDeclarations.some((f) => f.name === "move_section"));
+  assert.equal(req.toolConfig.functionCallingConfig.mode, "AUTO");
+  assert.equal(req.generationConfig.responseSchema, undefined, "tools and JSON mode do not mix");
+});
+
+test("chat responses: text and function calls, thoughts skipped, bad calls reported", () => {
+  const out = readGeminiChat({
+    candidates: [
+      {
+        finishReason: "STOP",
+        content: {
+          parts: [
+            { text: "pensando…", thought: true },
+            { text: "Preparei **duas** alterações:\n* mover\n* ocultar" },
+            { functionCall: { name: "move_section", args: { section: "solutions", position: 2 } }, thoughtSignature: "abc" },
+            { functionCall: { name: "review_texts" } },
+          ],
+        },
+      },
+    ],
+  });
+  assert.equal(out.text, "Preparei duas alterações:\n- mover\n- ocultar");
+  assert.deepEqual(out.calls, [
+    { name: "move_section", args: { section: "solutions", position: 2 } },
+    { name: "review_texts", args: {} },
+  ]);
+  assert.throws(() => readGeminiChat({ candidates: [{ finishReason: "MALFORMED_FUNCTION_CALL", content: { parts: [] } }] }), /ação inválida/);
+  assert.throws(() => readGeminiChat({ candidates: [{ finishReason: "STOP", content: { parts: [] } }] }), /não devolveu/);
+});
+
+test("a conversation carries up to eight photos", () => {
+  const photo = { mimeType: "image/jpeg", data: "QUJD" };
+  const withPhotos = (n) => chatBody([{ role: "user", text: "Galeria", images: Array.from({ length: n }, () => photo) }]);
+  assert.equal(validateAiRequest(withPhotos(8)).ok, true);
+  assert.equal(validateAiRequest(withPhotos(9)).ok, false);
+});

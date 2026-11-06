@@ -18,7 +18,9 @@ import {
   type SaveState,
 } from "./editing";
 import { CopyContext, ImageSwap, T, type Field, type TextStyle } from "./copy";
-import { CurationPanel, TextToolbar, type AiStatus } from "./assistant";
+import { TextToolbar, type AiStatus } from "./assistant";
+import { ChatPanel, type ChatAction, type ChatSite } from "./chat";
+import { applyAction, COMPANY_FIELDS } from "@/lib/site-actions.mjs";
 import {
   BlockBar,
   blockDom,
@@ -45,6 +47,7 @@ import {
   QuoteBuilder,
   SectorIcon,
   SiteFooter,
+  socialsOf,
   Solutions,
   type Content,
   type Ed,
@@ -137,7 +140,7 @@ export default function UsibarHome() {
     [companyOpen, setCompanyOpen] = useState(false),
     [activeField, setActiveField] = useState<Field | null>(null),
     [aiStatus, setAiStatus] = useState<AiStatus>(null),
-    [curationOpen, setCurationOpen] = useState(false),
+    [chatOpen, setChatOpen] = useState(false),
     [pickerAt, setPickerAt] = useState<number | null>(null),
     [waHello, setWaHello] = useState(false);
   const root = useRef<HTMLElement>(null),
@@ -153,6 +156,7 @@ export default function UsibarHome() {
     queue = useRef<Promise<unknown>>(Promise.resolve()),
     stale = useRef(""),
     fields = useRef(new Map<string, Field>()),
+    uploaded = useRef(new WeakMap<File, Record<string, string>>()),
     loaded = !!content;
   const nav = content ? buildNav(content) : [];
   const navKey = nav.map((n) => n.id).join("|");
@@ -257,7 +261,7 @@ export default function UsibarHome() {
     return p;
   }, []);
   // Photo upload for the in-place "Trocar foto" controls; errors show in the edit bar.
-  const upload = useCallback(async (file: File) => {
+  const upload = useCallback(async (file: File, removeBg = false) => {
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setSave({ kind: "error", message: "Envie uma imagem JPG, PNG ou WebP." });
       return null;
@@ -266,6 +270,7 @@ export default function UsibarHome() {
     try {
       const fd = new FormData();
       fd.append("file", file);
+      if (removeBg) fd.append("removeBg", "true");
       const res = await authFetch("/api/upload", { method: "POST", body: fd });
       if (!res.ok) throw Error((await readError(res)) || "Falha no envio da imagem.");
       return (await res.json()).url as string;
@@ -288,6 +293,9 @@ export default function UsibarHome() {
     const t = setTimeout(() => setSave({ kind: "idle" }), 6000);
     return () => clearTimeout(t);
   }, [save]);
+  useEffect(() => {
+    document.documentElement.classList.toggle("chat-open", editing && chatOpen);
+  }, [editing, chatOpen]);
   useEffect(() => {
     document.documentElement.classList.toggle("is-editing", editing);
     if (editing && !safeStorage.get("usibar-edit-hint")) setHint(true);
@@ -634,6 +642,71 @@ export default function UsibarHome() {
     setLayout(`${label} alterado`, (l) => l.map((b) => (b.id === id ? { ...b, data: change(b.data ?? {}) } : b)));
   const blockName = (b: Block) => (isBuiltin(b.type) ? tx(`nav.${b.type}`, BUILTIN_INFO[b.type].nav) : String(b.data?.nav ?? TEMPLATE_INFO[b.type].name));
   const missing = BUILTINS.filter((t) => !layout.some((b) => b.type === t));
+
+  // The editing chat: what it may know about the site, and how its actions are carried out.
+  const chatSite: ChatSite = {
+    sections: layout.map((b) => ({ id: b.id, type: b.type, name: blockName(b).slice(0, 80), hidden: !!b.hidden })),
+    products: products.map(({ id, code, title, category, featured }) => ({ id, code: code.slice(0, 40), title: title.slice(0, 200), category, featured })),
+    company: Object.fromEntries(Object.keys(COMPANY_FIELDS).flatMap((k) => (typeof company[k] === "string" && company[k] ? [[k, company[k]]] : []))),
+    socials: socialsOf(company).map(({ network, url }) => ({ network, url })),
+    images: [
+      { target: "hero", label: "a foto grande do topo" },
+      { target: "company", label: "a foto da seção da empresa" },
+      ...services.map((x) => ({ target: `service:${x.id}`, label: `a foto da solução “${x.title.slice(0, 80)}”` })),
+      ...layout.filter((b) => b.type === "text-image").map((b) => ({ target: `section:${b.id}`, label: `a foto da seção “${blockName(b).slice(0, 80)}”` })),
+      ...products.map((p) => ({ target: `product:${p.id}`, label: `a foto da peça ${p.code.slice(0, 40)}` })),
+    ],
+  };
+  const runChatAction = async ({ name, args }: ChatAction, files: Map<string, File>) => {
+    if (name === "set_text") {
+      const f = fields.current.get(String(args.key));
+      if (!f) throw Error("Esse texto não está na página agora.");
+      f.commit(String(args.text));
+      return `Texto “${f.label}” alterado`;
+    }
+    // Photos go up only when an action that uses them is applied; each version of a file is sent once.
+    const wanted: [string, boolean][] = [];
+    if (typeof args.image === "string") wanted.push([args.image, args.remove_background === true]);
+    if (Array.isArray(args.photos)) for (const ph of args.photos as { image: string }[]) wanted.push([ph.image, false]);
+    const urls = new Map<string, string>();
+    for (const [id, removeBg] of wanted) {
+      const file = files.get(id);
+      if (!file) throw Error(`A foto ${id} não está mais disponível.`);
+      const done = uploaded.current.get(file) ?? {};
+      const kind = removeBg ? "cutout" : "plain";
+      if (!done[kind]) {
+        const url = await upload(file, removeBg);
+        if (!url) throw Error("Não foi possível enviar a foto.");
+        uploaded.current.set(file, { ...done, [kind]: url });
+      }
+      urls.set(`${id}:${removeBg}`, uploaded.current.get(file)![kind]);
+    }
+    let result: { content: Content; label: string };
+    try {
+      result = applyAction(contentRef.current!, { name, args }, {
+        url: (id: string, removeBg?: boolean) => urls.get(`${id}:${!!removeBg}`),
+        templateData: (type: string) => TEMPLATE_INFO[type as keyof typeof TEMPLATE_INFO].data(),
+        newId: () => crypto.randomUUID().replace(/-/g, "").slice(0, 10),
+        sectionName: (b: Block) => blockName(b),
+      });
+    } catch (e) {
+      if (wanted.length) setSave({ kind: "idle" }); // the upload left the bar on "saving"
+      throw e;
+    }
+    if (!(await commit(result.label, () => result.content))) throw Error("O servidor recusou a alteração; ela foi desfeita.");
+    return result.label;
+  };
+  const showOnSite = ({ section: id, key }: { section?: string; key?: string }) => {
+    const el = key ? fields.current.get(key)?.el : undefined;
+    if (el) {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.classList.add("flash");
+      setTimeout(() => el.classList.remove("flash"), 2200);
+      return;
+    }
+    const b = layout.find((x) => x.id === id);
+    if (b) goTo(blockDom(b));
+  };
   const numbers = new Map<string, string>();
   layout.filter((b) => !b.hidden).forEach((b, i) => numbers.set(b.id, String(i + 1).padStart(2, "0")));
 
@@ -1194,7 +1267,7 @@ export default function UsibarHome() {
             }}
           />
         )}
-        {curationOpen && <CurationPanel ai={aiStatus} lenis={lenisRef.current} onClose={() => setCurationOpen(false)} />}
+        {editing && <ChatPanel open={chatOpen} ai={aiStatus} site={chatSite} run={runChatAction} show={showOnSite} onClose={() => setChatOpen(false)} />}
         {editing && <TextToolbar ai={aiStatus} />}
         {adminsOpen && <AdminsPanel lenis={lenisRef.current} onClose={() => setAdminsOpen(false)} />}
         {logged && (
@@ -1212,7 +1285,7 @@ export default function UsibarHome() {
             }}
             onAdd={() => setEditorPart({ ...blankPart })}
             onCompany={() => setCompanyOpen(true)}
-            onCurate={() => setCurationOpen(true)}
+            onCurate={() => setChatOpen((o) => !o)}
             onAdmins={accounts ? () => setAdminsOpen(true) : undefined}
             onLogout={async () => {
               await Promise.all([fetch("/api/auth", { method: "DELETE" }).catch(() => {}), signOut()]);
