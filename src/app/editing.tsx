@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { nextCode } from "@/lib/site-actions.mjs";
 import { adminCall, authFetch, changeMyPassword, type AdminRow } from "@/lib/browser-auth";
 
 export type Part = {
@@ -30,6 +31,7 @@ export const blankPart: Part = {
 };
 
 export { Editable } from "./copy";
+
 
 // Body scroll lock, Escape to close and a focus trap for dialogs.
 export function useModal(
@@ -132,14 +134,14 @@ export function ProductEditor({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!item.imageUrl) return setMsg("Adicione uma foto da peça.");
-    if (codes.includes(item.code.trim()))
-      return setMsg("Já existe uma peça com este código.");
+    // The code is internal (not shown or typed): kept when editing, generated for a new part.
+    const code = item.code.trim() && !codes.includes(item.code.trim()) ? item.code.trim() : nextCode(item.category, codes);
     setBusy(true);
     setMsg("Salvando…");
     const ok = await onSave({
       ...item,
       id: item.id || crypto.randomUUID(),
-      code: item.code.trim(),
+      code,
       title: item.title.trim(),
       specs: item.specs.trim(),
       description: item.description.trim(),
@@ -160,7 +162,7 @@ export function ProductEditor({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="part-dialog-top tiny-mono">
-          <span>{part.id ? `${part.code} / EDIÇÃO` : "NOVA PEÇA / CADASTRO"}</span>
+          <span>{part.id ? "PEÇA / EDIÇÃO" : "NOVA PEÇA / CADASTRO"}</span>
           <button type="button" onClick={onClose} disabled={busy}>
             FECHAR ×
           </button>
@@ -215,16 +217,6 @@ export function ProductEditor({
             Remover fundo branco ao enviar
           </label>
           <div className="editor-row">
-            <label>
-              <span className="tiny-mono">Código</span>
-              <input
-                required
-                maxLength={40}
-                value={item.code}
-                onChange={(e) => set("code", e.target.value)}
-                placeholder="USB-CH-09"
-              />
-            </label>
             <fieldset>
               <legend className="tiny-mono">Categoria</legend>
               {[

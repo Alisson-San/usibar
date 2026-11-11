@@ -152,6 +152,10 @@ export function useText() {
   return (k: string, d: string) => copy[k] ?? d;
 }
 
+export function useHidden() {
+  return useContext(CopyContext).hidden;
+}
+
 export function useEditing() {
   return useContext(CopyContext).editing;
 }

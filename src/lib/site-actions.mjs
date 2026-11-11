@@ -76,6 +76,15 @@ export function validNotice(n) {
 export const noticeActive = (n, today) => !!n?.enabled && today >= n.start && today <= n.end;
 // Texts and buttons of the fixed sections the admin removed (they come back with "Recolocar").
 export const validHidden = (h) => Array.isArray(h) && h.length <= 200 && h.every((k) => typeof k === "string" && /^[a-z0-9][a-z0-9._-]{0,79}$/i.test(k));
+/* Internal product code (not shown on the site; kept for references and the assistant):
+   the next free one in the pattern of the category, USB-CH-01 for cylinders, USB-BH-01 for blocks. */
+export function nextCode(category, codes) {
+  const prefix = category === "blocos" ? "USB-BH-" : "USB-CH-";
+  const upper = codes.map((c) => String(c).trim().toUpperCase());
+  let n = 1 + Math.max(0, ...upper.map((c) => (c.startsWith(prefix) ? parseInt(c.slice(prefix.length), 10) || 0 : 0)));
+  while (upper.includes(prefix + String(n).padStart(2, "0"))) n++;
+  return prefix + String(n).padStart(2, "0");
+}
 // Fields allowed in each template section and their limits; anything else is refused.
 export const TEMPLATE_FIELDS = {
   blocks: { nav: 40, blocks: "blocks" },
@@ -161,7 +170,7 @@ const TEMPLATE_PROPS = {
 };
 const PRODUCT_PROPS = {
   title: s("Nome da peça."),
-  code: s("Código único, no padrão dos existentes (ex.: USB-CH-05 para cilindros, USB-BH-05 para blocos)."),
+  code: s("Código interno (opcional; não aparece no site). Sem ele, o próximo do padrão é gerado (USB-CH-05 para cilindros, USB-BH-05 para blocos)."),
   category: s("Categoria.", { enum: PRODUCT_CATEGORIES }),
   specs: s("Linha curta de características, separadas por •."),
   description: s("Descrição curta, sem inventar medidas ou números."),
@@ -245,7 +254,7 @@ export const CHAT_TOOLS = [
   {
     name: "add_product",
     description: "Cadastra uma peça nova no catálogo, com uma foto anexada.",
-    parameters: obj(PRODUCT_PROPS, ["title", "code", "category", "image"]),
+    parameters: obj(PRODUCT_PROPS, ["title", "category", "image"]),
   },
   {
     name: "update_product",
@@ -487,8 +496,8 @@ export function acceptActions(calls, site, texts) {
           : null;
       case "add_product": {
         const p = productArgs(a);
-        if (!(p.title && p.code && p.category && p.image)) return null;
-        if (site.products.some((x) => x.code === p.code)) return null;
+        if (!(p.title && p.category && p.image)) return null;
+        if (p.code && site.products.some((x) => x.code === p.code)) return null;
         return p;
       }
       case "update_product": {
@@ -620,7 +629,7 @@ export function describeAction({ name, args: a }, site, texts) {
     case "set_image":
       return `Trocar ${target(a.target)} por ${a.image}${a.remove_background ? " (com recorte do fundo)" : ""}`;
     case "add_product":
-      return `Cadastrar a peça ${quoted(a.title, 50)} (${a.code}, ${a.category}) com ${a.image}${a.remove_background ? ", recortando o fundo" : ""}`;
+      return `Cadastrar a peça ${quoted(a.title, 50)} (${a.category}) com ${a.image}${a.remove_background ? ", recortando o fundo" : ""}`;
     case "update_product":
       return `Atualizar a peça ${product(a.product)}: ${fieldList(omit(a, "product"), PRODUCT_LABELS)}`;
     case "remove_product":
@@ -763,10 +772,10 @@ export function applyAction(c, { name, args: a }, ctx) {
       return fail("Não sei trocar essa foto.");
     }
     case "add_product": {
-      if (c.products.some((p) => p.code === a.code)) fail(`Já existe uma peça com o código ${a.code}.`);
+      if (a.code && c.products.some((p) => p.code === a.code)) fail(`Já existe uma peça com o código ${a.code}.`);
       const p = {
         id: ctx.newId(),
-        code: a.code,
+        code: a.code || nextCode(a.category, c.products.map((x) => x.code)),
         title: a.title,
         category: a.category,
         featured: a.featured ?? false,
