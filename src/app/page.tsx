@@ -89,6 +89,12 @@ function buildNav(c: Content): NavItem[] {
       return { id: blockDom(b), n, label: String(b.data?.nav ?? TEMPLATE_INFO[b.type].name), hint: String(b.data?.title ?? "") };
     });
 }
+// The top label of the hero: key, editor label and default (empty = the company's city).
+const HERO_EYEBROW: [string, string, string][] = [
+  ["hero.eyebrow", "Topo — rótulo", "FABRICAÇÃO SOB MEDIDA"],
+  ["hero.city", "Topo — cidade", ""],
+  ["hero.country", "Topo — país", "BRASIL"],
+];
 const knownType = (t: unknown) => (BUILTINS as readonly unknown[]).includes(t) || (TEMPLATES as readonly unknown[]).includes(t);
 // Facts that may be missing from content saved before they existed.
 const companyDefaults = {
@@ -628,6 +634,9 @@ export default function UsibarHome() {
   );
   const text = (key: string, label: string) => ed(company[key] ?? "", label, (c, v) => ({ ...c, company: { ...c.company, [key]: v } }), `company.${key}`);
   const tx = (k: string, d: string) => content.copy[k] ?? d;
+  const hidden = content.hidden ?? [];
+  // A removed first item takes its separator along ("· cidade — país" never starts the line).
+  const heroEyebrow = HERO_EYEBROW.filter(([k]) => !hidden.includes(k));
   const copyCtx = {
     copy: content.copy,
     styles: content.styles,
@@ -791,7 +800,7 @@ export default function UsibarHome() {
               +
             </span>
             <strong>Cadastrar nova peça</strong>
-            <span className="tiny-mono">FOTO · CÓDIGO · DESCRIÇÃO</span>
+            <span className="tiny-mono">FOTO · NOME · DESCRIÇÃO</span>
           </button>
         )}
         {parts.map((part, i) => (
@@ -802,11 +811,8 @@ export default function UsibarHome() {
             aria-label={`${editing ? "Editar" : "Ver detalhes de"} ${part.title}`}
           >
             <div className="product-top tiny-mono">
-              <span>
-                {part.code}
-                {part.featured ? ` / ${tx("catalog.featured", "DESTAQUE")}` : ""}
-              </span>
-              <span>{quote.refs.includes(part.code) ? `${tx("catalog.inquote", "NO ORÇAMENTO")} ✓` : String(i + 1).padStart(2, "0")}</span>
+              <span>{part.featured ? tx("catalog.featured", "DESTAQUE") : ""}</span>
+              <span>{quote.refs.includes(part.id) ? `${tx("catalog.inquote", "NO ORÇAMENTO")} ✓` : String(i + 1).padStart(2, "0")}</span>
             </div>
             <div className="product-photo">
               <div className="product-cross one" />
@@ -983,7 +989,7 @@ export default function UsibarHome() {
       case "sectors":
         return sectorsSection(num);
       case "quote":
-        return <QuoteBuilder num={num} company={company} sectors={sectors} services={services} quote={quote} setQuote={setQuote} />;
+        return <QuoteBuilder num={num} company={company} sectors={sectors} services={services} products={products} quote={quote} setQuote={setQuote} />;
       default:
         return <TemplateSection block={b} num={num} update={updateBlock} whatsapp={wa} />;
     }
@@ -1118,11 +1124,19 @@ export default function UsibarHome() {
         <section className="hero" id="inicio">
           <div className="hero-layout">
             <div className="hero-copy">
-              <Removable k="hero.eyebrow" label="Topo — rótulo">
+              {/* Label, city and country are separate texts: each one is edited, styled and removed
+                  on its own. The city starts from the company's city and, once edited here, stays
+                  independent from the contact data. */}
+              {(editing || heroEyebrow.length > 0) && (
                 <span className="eyebrow hero-eyebrow">
-                  <T k="hero.eyebrow" d="FABRICAÇÃO SOB MEDIDA" label="Topo — rótulo" /> · {text("city", "Cidade / UF")} — <T k="hero.country" d="BRASIL" label="Topo — país" />
+                  {(editing ? HERO_EYEBROW : heroEyebrow).map(([k, label, d], i) => (
+                    <Removable key={k} k={k} label={label}>
+                      {i > 0 && (k === "hero.country" ? " — " : " · ")}
+                      <T k={k} d={d || company.city || ""} label={label} />
+                    </Removable>
+                  ))}
                 </span>
-              </Removable>
+              )}
               <h1 className="hero-title">
                 <span>
                   <span className="line-inner">
@@ -1144,11 +1158,16 @@ export default function UsibarHome() {
               <Removable k="hero.lead" label="Topo — lema" block>
                 <p className="hero-lead">{text("motto", "Lema da empresa")}</p>
               </Removable>
-              <Removable k="hero.note" label="Topo — subtítulo e convite" block>
+              {(editing || !hidden.includes("hero.subheadline") || !hidden.includes("hero.note")) && (
                 <p className="hero-note">
-                  {text("subheadline", "Subtítulo do topo")} <T k="hero.note" d="Envie o desenho técnico ou as especificações da sua aplicação." label="Topo — convite" />
+                  <Removable k="hero.subheadline" label="Topo — subtítulo">
+                    {text("subheadline", "Subtítulo do topo")}
+                  </Removable>{" "}
+                  <Removable k="hero.note" label="Topo — convite">
+                    <T k="hero.note" d="Envie o desenho técnico ou as especificações da sua aplicação." label="Topo — convite" />
+                  </Removable>
                 </p>
-              </Removable>
+              )}
               <div className="hero-actions">
                 <Removable k="hero.cta.1" label="Topo — botão principal">
                   <a href="#orcamento" className="btn-primary">
@@ -1172,7 +1191,7 @@ export default function UsibarHome() {
               <ImageSwap label="foto do topo" onChange={(url) => commit("Foto do topo trocada", (c) => ({ ...c, company: { ...c.company, heroImageUrl: url } }))} />
             </div>
           </div>
-          <ProofBar company={company} ed={ed} />
+          <ProofBar company={company} />
         </section>
         {content.notice && <NoticeStrip notice={content.notice} onOpen={() => (editing ? setNoticeEdit(true) : setNoticeShown(true))} />}
 
@@ -1229,7 +1248,7 @@ export default function UsibarHome() {
             <div className="part-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby="part-title" onClick={(e) => e.stopPropagation()}>
               <div className="part-dialog-top tiny-mono">
                 <span>
-                  {active.code} · {activeIndex + 1} / {parts.length}
+                  {activeIndex + 1} / {parts.length}
                 </span>
                 <span className="part-nav">
                   <button onClick={() => step(-1)} aria-label="Peça anterior">
@@ -1252,7 +1271,7 @@ export default function UsibarHome() {
                 <h2 id="part-title">{active.title}</h2>
                 <p>{active.description}</p>
                 <div className="part-actions">
-                  <a href={wa(`Olá! Gostaria de uma cotação para ${active.title} (${active.code}).`)} target="_blank" rel="noreferrer" className="solid-link">
+                  <a href={wa(`Olá! Gostaria de uma cotação para ${active.title}.`)} target="_blank" rel="noreferrer" className="solid-link">
                     <span className="with-glyph">
                       <Glyph name="whatsapp" /> {tx("dialog.quote", "Pedir cotação pelo WhatsApp")}
                     </span>
@@ -1260,16 +1279,16 @@ export default function UsibarHome() {
                   </a>
                   <button
                     className="ghost-link"
-                    aria-pressed={quote.refs.includes(active.code)}
+                    aria-pressed={quote.refs.includes(active.id)}
                     onClick={() =>
                       setQuote((q) => ({
                         ...q,
                         type: q.type || (services.find((s) => s.category === active.category)?.title ?? ""),
-                        refs: q.refs.includes(active.code) ? q.refs.filter((r) => r !== active.code) : [...q.refs, active.code],
+                        refs: q.refs.includes(active.id) ? q.refs.filter((r) => r !== active.id) : [...q.refs, active.id],
                       }))
                     }
                   >
-                    {quote.refs.includes(active.code) ? `${tx("dialog.added", "Incluído no orçamento")} ✓` : `+ ${tx("dialog.add", "Incluir no orçamento")}`}
+                    {quote.refs.includes(active.id) ? `${tx("dialog.added", "Incluído no orçamento")} ✓` : `+ ${tx("dialog.add", "Incluir no orçamento")}`}
                   </button>
                 </div>
               </div>

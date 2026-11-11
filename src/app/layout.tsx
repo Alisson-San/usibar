@@ -1,26 +1,27 @@
 import type { Metadata } from "next";
-import {
-  Space_Grotesk,
-  Plus_Jakarta_Sans,
-  JetBrains_Mono,
-} from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import seed from "../../data/db.json";
 
-const space = Space_Grotesk({
-  subsets: ["latin"],
-  weight: ["600", "700"],
+// Fontes hospedadas no próprio repositório (subconjunto latin, fontes variáveis),
+// para o build não depender do Google Fonts estar respondendo.
+const space = localFont({
+  src: "./fonts/space-grotesk-latin.woff2",
+  weight: "600 700",
   variable: "--font-display",
+  display: "swap",
 });
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const jakarta = localFont({
+  src: "./fonts/plus-jakarta-sans-latin.woff2",
+  weight: "400 700",
   variable: "--font-sans",
+  display: "swap",
 });
-const mono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "600"],
+const mono = localFont({
+  src: "./fonts/jetbrains-mono-latin.woff2",
+  weight: "400 600",
   variable: "--font-mono",
+  display: "swap",
 });
 
 const c = seed.company;
