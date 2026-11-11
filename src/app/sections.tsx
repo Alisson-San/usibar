@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Company, Part } from "./editing";
 import type { Step } from "./ProcessSection";
-import { ImageSwap, Removable, T, useEditing, useText, type TextStyle } from "./copy";
+import { ImageSwap, Removable, T, useEditing, useHidden, useText, type TextStyle } from "./copy";
 import type { Block } from "./blocks";
 import { LogoFull } from "./logo";
 
@@ -197,27 +197,38 @@ export function HeroArt({ src }: { src: string }) {
   );
 }
 
-export function ProofBar({ company, ed }: { company: Company; ed: Ed }) {
-  const items = [
-    {
-      value: ed(company.experienceYears, "Anos de experiência", (c, v) => ({ ...c, company: { ...c.company, experienceYears: v } }), "company.experienceYears"),
-      label: <T k="proof.1" d="anos de experiência em soluções hidráulicas" label="Faixa de fatos 1" />,
-    },
-    {
-      value: ed(company.city, "Cidade / UF", (c, v) => ({ ...c, company: { ...c.company, city: v } }), "company.city"),
-      label: <T k="proof.2" d="nossa sede, no Rio Grande do Sul" label="Faixa de fatos 2" />,
-    },
-    { value: <T k="proof.3.value" d="Sob projeto" label="Faixa de fatos 3 — destaque" />, label: <T k="proof.3" d="cada peça segue as especificações da sua aplicação" label="Faixa de fatos 3" /> },
-    { value: <T k="proof.4.value" d="CNC" label="Faixa de fatos 4 — destaque" />, label: <T k="proof.4" d="usinagem de alta precisão com controle de qualidade" label="Faixa de fatos 4" /> },
+export function ProofBar({ company }: { company: Company }) {
+  // Every number and caption is its own text: the years and the city start from the company
+  // data and, once edited here, no longer change the "Empresa" section or the contact details.
+  const items: [string, string][] = [
+    [company.experienceYears ?? "", "anos de experiência em soluções hidráulicas"],
+    [company.city ?? "", "nossa sede, no Rio Grande do Sul"],
+    ["Sob projeto", "cada peça segue as especificações da sua aplicação"],
+    ["CNC", "usinagem de alta precisão com controle de qualidade"],
   ];
+  const editing = useEditing();
+  const hidden = useHidden();
   return (
     <ul className="proof-bar" aria-label="A Usibar em números e fatos">
-      {items.map((it, i) => (
-        <li key={i}>
-          <strong>{it.value}</strong>
-          <span>{it.label}</span>
-        </li>
-      ))}
+      {items.map(([value, caption], i) => {
+        const vk = `proof.${i + 1}.value`,
+          ck = `proof.${i + 1}`;
+        if (!editing && hidden.includes(vk) && hidden.includes(ck)) return null;
+        return (
+          <li key={i}>
+            <strong>
+              <Removable k={vk} label={`Faixa de fatos ${i + 1} — destaque`}>
+                <T k={vk} d={value} label={`Faixa de fatos ${i + 1} — destaque`} />
+              </Removable>
+            </strong>
+            <span>
+              <Removable k={ck} label={`Faixa de fatos ${i + 1}`}>
+                <T k={ck} d={caption} label={`Faixa de fatos ${i + 1}`} />
+              </Removable>
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -404,15 +415,16 @@ export type Quote = {
   drawing: string;
   name: string;
   details: string;
+  // Catalog parts the visitor picked as reference (part ids; shown and sent by name).
   refs: string[];
 };
 export const emptyQuote: Quote = { type: "", sector: "", qty: "", drawing: "", name: "", details: "", refs: [] };
 
-export function quoteMessage(q: Quote) {
+export function quoteMessage(q: Quote, refNames: string[] = q.refs) {
   const lines = ["Olá, equipe Usibar! Gostaria de solicitar um orçamento."];
   if (q.name.trim()) lines.push(`Nome / empresa: ${q.name.trim()}`);
   if (q.type) lines.push(`Produto: ${q.type}`);
-  if (q.refs.length) lines.push(`Modelos de referência: ${q.refs.join(", ")}`);
+  if (q.refs.length) lines.push(`Modelos de referência: ${refNames.join(", ")}`);
   if (q.sector) lines.push(`Aplicação: ${q.sector}`);
   if (q.qty) lines.push(`Quantidade: ${q.qty}`);
   if (q.drawing) lines.push(`Desenho técnico: ${q.drawing}`);
@@ -427,6 +439,7 @@ export function QuoteBuilder({
   company,
   sectors,
   services,
+  products,
   quote,
   setQuote,
 }: {
@@ -434,6 +447,7 @@ export function QuoteBuilder({
   company: Company;
   sectors: Sector[];
   services: Service[];
+  products: Part[];
   quote: Quote;
   setQuote: (q: Quote) => void;
 }) {
@@ -441,7 +455,11 @@ export function QuoteBuilder({
   const [step, setStep] = useState(0);
   const [sent, setSent] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
-  const message = useMemo(() => quoteMessage(quote), [quote]);
+  const refs = useMemo(
+    () => quote.refs.flatMap((id) => products.filter((p) => p.id === id).map((p) => ({ id, name: p.title }))),
+    [quote.refs, products],
+  );
+  const message = useMemo(() => quoteMessage(quote, refs.map((r) => r.name)), [quote, refs]);
   // Arriving with a product already chosen (from Soluções or the catalog) skips the first question.
   const startedWith = useRef(quote.type);
   useEffect(() => {
@@ -539,12 +557,12 @@ export function QuoteBuilder({
                   </span>
                   {current.title}
                 </h3>
-                {step === 0 && quote.refs.length > 0 && (
+                {step === 0 && refs.length > 0 && (
                   <p className="wizard-refs">
                     <T k="quote.refs" d="Do catálogo:" label="Orçamento — modelos de referência" />{" "}
-                    {quote.refs.map((r) => (
-                      <button key={r} onClick={() => setQuote({ ...quote, refs: quote.refs.filter((x) => x !== r) })} aria-label={`Remover ${r}`}>
-                        {r} ×
+                    {refs.map((r) => (
+                      <button key={r.id} onClick={() => setQuote({ ...quote, refs: quote.refs.filter((x) => x !== r.id) })} aria-label={`Remover ${r.name}`}>
+                        {r.name} ×
                       </button>
                     ))}
                   </p>
@@ -711,7 +729,11 @@ export function SiteFooter({ company, logged, onEdit, nav }: { company: Company;
         <span className="footer-logo" data-tone="light">
           <LogoFull />
         </span>
-        <p>{company.motto ?? company.Tagline}</p>
+        <Removable k="footer.motto" label="Rodapé — lema" block>
+          <p>
+            <T k="footer.motto" d={company.motto ?? company.Tagline ?? ""} label="Rodapé — lema" />
+          </p>
+        </Removable>
         <SocialLinks company={company} />
       </div>
       <nav aria-label="Rodapé">
