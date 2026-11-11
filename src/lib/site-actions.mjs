@@ -115,6 +115,19 @@ export const COMPANY_FIELDS = {
 };
 export const SOCIALS = ["instagram", "facebook", "linkedin", "youtube", "tiktok", "x", "site"];
 export const PRODUCT_CATEGORIES = ["cilindros", "blocos"];
+export const SERVICE_CATEGORIES = ["cilindros", "blocos", "all"];
+export const ASSET_IMAGES = [
+  "/assets/cilindro-tirante.webp",
+  "/assets/cilindro-olhal.webp",
+  "/assets/cilindro-longo.webp",
+  "/assets/cilindro-valvula.webp",
+  "/assets/bloco-manifold-medio.webp",
+  "/assets/bloco-robusto.webp",
+  "/assets/bloco-compacto.webp",
+  "/assets/bloco-manifold-longo.webp",
+  "/assets/hero-bench.webp",
+];
+const DEFAULT_PART_ASSET = (cat) => (cat === "blocos" ? "/assets/bloco-manifold-medio.webp" : "/assets/cilindro-tirante.webp");
 
 const STR = "STRING";
 const s = (description, extra = {}) => ({ type: STR, description, ...extra });
@@ -122,6 +135,7 @@ const s = (description, extra = {}) => ({ type: STR, description, ...extra });
 const obj = (properties, required = []) => ({ type: "OBJECT", properties, ...(required.length ? { required } : {}) });
 const SECTION = s("O id da seção, exatamente como aparece em SEÇÕES.");
 const IMAGE = s("O id de uma foto anexada nesta conversa (ex.: foto-1).");
+const ASSET_IMAGE = s("Foto pronta do acervo com fundo recortado (use quando nenhuma foto foi anexada).", { enum: ASSET_IMAGES });
 const BLOCK_PROPS = {
   kind: s("Tipo do bloco: label (rótulo), heading (título), text (parágrafo), button (botão), image (foto), features (destaques com ícone), callout (chamada com ícone), quote (citação), stats (números), divider (divisória).", { enum: BLOCK_KINDS }),
   text: s("Texto do rótulo, título, parágrafo, botão, chamada ou citação."),
@@ -176,7 +190,17 @@ const PRODUCT_PROPS = {
   description: s("Descrição curta, sem inventar medidas ou números."),
   featured: { type: "BOOLEAN", description: "Destacar no catálogo." },
   image: IMAGE,
-  remove_background: { type: "BOOLEAN", description: "Recortar o fundo da foto (bom para fotos de peça com fundo poluído)." },
+  asset_image: ASSET_IMAGE,
+  remove_background: { type: "BOOLEAN", description: "Recortar o fundo branco da foto anexada." },
+};
+const SERVICE_PROPS = {
+  title: s("Título da solução (até 120 caracteres)."),
+  lead: s("Frase curta em destaque laranja (até 200 caracteres)."),
+  copy: s("Descrição da solução (até 600 caracteres)."),
+  category: s("Vínculo com o catálogo.", { enum: SERVICE_CATEGORIES }),
+  image: IMAGE,
+  asset_image: ASSET_IMAGE,
+  remove_background: { type: "BOOLEAN", description: "Recortar o fundo branco da foto anexada." },
 };
 
 /** Function declarations for Gemini (OpenAPI-style schema). */
@@ -188,13 +212,19 @@ export const CHAT_TOOLS = [
   },
   {
     name: "style_text",
-    description: "Muda a cor e/ou o tamanho de um texto da lista TEXTOS, ou volta ao padrão.",
+    description:
+      "Altera aparência, largura e/ou posição responsiva de um bloco de texto da lista TEXTOS: cor, tamanho, largura (% da seção para esticar o texto sem quebrar linha), alinhamento e coordenadas x/y (0 a 100, onde 0 e 100 encostam bem nos cantos em qualquer resolução).",
     parameters: obj(
       {
         key: s("Chave do texto."),
         color: s("Cor #rrggbb. Cores da marca: laranja #fa4804, terracota #bf4f29, grafite #292c27, areia #f7f2e9."),
         size: { type: "NUMBER", description: "Tamanho em relação ao padrão, de 0.6 a 2.4 (1 = padrão)." },
-        reset: { type: "BOOLEAN", description: "true para voltar cor e tamanho ao padrão." },
+        width: { type: "NUMBER", description: "Largura do bloco em % da seção, de 10 a 100 (ex.: 75 ou 95 para esticar e evitar quebra de linha)." },
+        align: s("Alinhamento do texto dentro do bloco.", { enum: ["left", "center", "right"] }),
+        x: { type: "NUMBER", description: "Posição horizontal responsiva de 0 a 100 (0 = canto esquerdo, 50 = centro, 100 = canto direito)." },
+        y: { type: "NUMBER", description: "Posição vertical responsiva na seção de 0 a 100 (0 = topo, 50 = meio, 100 = base)." },
+        reset_position: { type: "BOOLEAN", description: "true para restaurar apenas largura, alinhamento e posição ao fluxo original." },
+        reset: { type: "BOOLEAN", description: "true para restaurar tudo (cor, tamanho, largura e posição) ao padrão." },
       },
       ["key"],
     ),
@@ -253,8 +283,8 @@ export const CHAT_TOOLS = [
   },
   {
     name: "add_product",
-    description: "Cadastra uma peça nova no catálogo, com uma foto anexada.",
-    parameters: obj(PRODUCT_PROPS, ["title", "category", "image"]),
+    description: "Cadastra uma peça nova no catálogo. Aceita uma foto anexada (image) OU uma foto pronta do acervo (asset_image, opcional — se omitida usa o modelo padrão da categoria).",
+    parameters: obj(PRODUCT_PROPS, ["title", "category"]),
   },
   {
     name: "update_product",
@@ -265,6 +295,67 @@ export const CHAT_TOOLS = [
     name: "remove_product",
     description: "Exclui uma peça do catálogo.",
     parameters: obj({ product: s("O id da peça, como em PEÇAS.") }, ["product"]),
+  },
+  {
+    name: "add_service",
+    description: "Adiciona um cartão na seção Soluções (até 6 soluções).",
+    parameters: obj(SERVICE_PROPS, ["title", "lead", "copy"]),
+  },
+  {
+    name: "update_service",
+    description: "Altera um cartão da seção Soluções. Envie só os campos que mudam.",
+    parameters: obj({ service: s("O id da solução, como em SOLUÇÕES."), ...SERVICE_PROPS }, ["service"]),
+  },
+  {
+    name: "remove_service",
+    description: "Remove um cartão da seção Soluções (mantendo pelo menos um).",
+    parameters: obj({ service: s("O id da solução, como em SOLUÇÕES.") }, ["service"]),
+  },
+  {
+    name: "add_sector",
+    description: "Adiciona um novo segmento atendido na seção Segmentos (até 20).",
+    parameters: obj({
+      name: s("Nome do segmento (ex.: Mineração, Naval, Florestal)."),
+      icon_type: s("Estilo de ícone sugerido (opcional).", { enum: ["agricola", "industrial", "transporte", "construcao", "elevadores", "especiais"] }),
+    }, ["name"]),
+  },
+  {
+    name: "update_sector",
+    description: "Renomeia um segmento atendido.",
+    parameters: obj({ sector: s("O id do segmento, como em SEGMENTOS."), name: s("Novo nome do segmento.") }, ["sector", "name"]),
+  },
+  {
+    name: "remove_sector",
+    description: "Remove um segmento atendido.",
+    parameters: obj({ sector: s("O id do segmento, como em SEGMENTOS.") }, ["sector"]),
+  },
+  {
+    name: "add_pillar",
+    description: "Adiciona um pilar institucional na seção Empresa (até 8 pilares).",
+    parameters: obj({ title: s("Título curto do pilar (até 60 caracteres)."), desc: s("Descrição do pilar (até 300 caracteres).") }, ["title", "desc"]),
+  },
+  {
+    name: "update_pillar",
+    description: "Altera título e/ou descrição de um pilar da seção Empresa.",
+    parameters: obj({ pillar: s("O id do pilar, como em PILARES."), title: s("Novo título."), desc: s("Nova descrição.") }, ["pillar"]),
+  },
+  {
+    name: "remove_pillar",
+    description: "Remove um pilar da seção Empresa.",
+    parameters: obj({ pillar: s("O id do pilar, como em PILARES.") }, ["pillar"]),
+  },
+  {
+    name: "update_process_step",
+    description: "Altera uma das 3 etapas da seção Processo (1 = O desenho, 2 = A usinagem, 3 = O movimento).",
+    parameters: obj(
+      {
+        step: { type: "INTEGER", description: "Número da etapa: 1, 2 ou 3." },
+        label: s("Rótulo curto da etapa (até 60 caracteres)."),
+        title: s("Título da etapa (até 120 caracteres)."),
+        copy: s("Texto explicativo da etapa (até 400 caracteres)."),
+      },
+      ["step"],
+    ),
   },
   {
     name: "update_company",
@@ -334,21 +425,45 @@ export const AUTO_ACTIONS = new Set(["review_texts", "show_on_site"]);
 const str = (v, max) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null);
 const clip = (v, max) => (typeof v === "string" && v.trim() ? v.trim().replace(/\s+/g, " ").slice(0, max) : null);
 const HEX = /^#[0-9a-f]{6}$/i;
+const numClamp = (v, min, max, dec = 1) => {
+  if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+  const f = 10 ** dec;
+  return Math.round(Math.min(max, Math.max(min, v)) * f) / f;
+};
 
 /**
- * Turns the model's function calls into actions the editor can show, dropping anything that
- * does not match the site as it is (unknown sections, products, texts or attachments).
+ * Turns the model's function calls into actions the editor can show/execute, dropping anything
+ * that does not match the site as it is (unknown sections, products, texts or attachments).
  * @param {{ name: string, args?: any }[]} calls
- * @param {{ sections: any[], products: any[], images: any[], attachments: any[] }} site
+ * @param {{ sections: any[], products: any[], images: any[], attachments: any[], services?: any[], sectors?: any[], pillars?: any[], removables?: any[] }} site
  * @param {{ key: string }[]} texts
  */
 export function acceptActions(calls, site, texts) {
   const sections = new Map(site.sections.map((b) => [b.id, b]));
   const products = new Map(site.products.map((p) => [p.id, p]));
+  const usedCodes = new Set(site.products.map((p) => p.code));
+  const services = new Map((site.services ?? []).map((x) => [x.id, x]));
+  const sectors = new Map((site.sectors ?? []).map((x) => [x.id, x]));
+  const pillars = new Map((site.pillars ?? []).map((x) => [x.id, x]));
   const keys = new Set(texts.map((t) => t.key));
   const targets = new Set(site.images.map((i) => i.target));
   const files = new Set(site.attachments.map((a) => a.id));
   const image = (v) => (typeof v === "string" && files.has(v) ? v : null);
+  const asset = (v) => (typeof v === "string" && ASSET_IMAGES.includes(v) ? v : null);
+  const validKey = (k) => {
+    if (typeof k !== "string") return false;
+    if (keys.has(k)) return true;
+    if (k.startsWith("company.") && k.slice(8) in COMPANY_FIELDS) return true;
+    if (/^process\.[012]\.(label|title|copy)$/.test(k)) return true;
+    const m1 = /^service\.([^.]+)\.(title|lead|copy)$/.exec(k);
+    if (m1 && services.has(m1[1])) return true;
+    const m2 = /^pillar\.([^.]+)\.(title|desc)$/.exec(k);
+    if (m2 && pillars.has(m2[1])) return true;
+    const m3 = /^sector\.([^.]+)\.name$/.exec(k);
+    if (m3 && sectors.has(m3[1])) return true;
+    return false;
+  };
+
   const actions = [];
   let dropped = 0;
   for (const call of Array.isArray(calls) ? calls : []) {
@@ -356,7 +471,7 @@ export function acceptActions(calls, site, texts) {
     const out = TOOL_NAMES.has(call?.name) ? accept(call.name, args) : null;
     if (out) actions.push({ name: call.name, args: out });
     else dropped++;
-    if (actions.length >= 25) break;
+    if (actions.length >= 50) break;
   }
   return { actions, dropped };
 
@@ -372,6 +487,7 @@ export function acceptActions(calls, site, texts) {
     }
     if (spec.side && (a.side === "left" || a.side === "right")) data.side = a.side;
     if (spec.imageUrl && image(a.image)) data.image = a.image;
+    else if (spec.imageUrl && asset(a.asset_image)) data.asset_image = a.asset_image;
     if (spec.items && Array.isArray(a.items)) {
       const items = a.items
         .map((it) => it && { value: clip(it.value, 40), label: clip(it.label, 200) })
@@ -414,11 +530,15 @@ export function acceptActions(calls, site, texts) {
         if (items.length) out.items = items;
       }
     }
+    if (!creating && kind === "image" && !out.image && asset(a.asset_image)) out.asset_image = a.asset_image;
     if (!creating) return Object.keys(out).length ? out : null;
     // Defaults that make a new block valid on its own.
     if (["label", "heading", "text", "quote"].includes(kind) && !out.text) return null;
     if (kind === "button") Object.assign(out, { text: out.text ?? "Solicitar orçamento", link: out.link ?? "#orcamento" });
-    if (kind === "image" && !out.image) return null;
+    if (kind === "image" && !out.image) {
+      if (asset(a.asset_image)) out.asset_image = a.asset_image;
+      else return null;
+    }
     if (kind === "callout") Object.assign(out, { icon: out.icon ?? "info", title: out.title ?? out.text ?? "Aviso" });
     if ((kind === "features" || kind === "stats") && !out.items) return null;
     return out;
@@ -430,13 +550,27 @@ export function acceptActions(calls, site, texts) {
   function productArgs(a) {
     const out = {};
     for (const k of ["title", "code", "specs", "description"]) {
-      const v = clip(a[k], k === "code" ? 40 : k === "title" ? 160 : 1500);
+      const v = clip(a[k], k === "code" ? 40 : k === "title" ? 160 : k === "specs" ? 300 : 1500);
       if (v) out[k] = v;
     }
     if (PRODUCT_CATEGORIES.includes(a.category)) out.category = a.category;
     if (typeof a.featured === "boolean") out.featured = a.featured;
     if (image(a.image)) out.image = a.image;
-    if (a.remove_background === true) out.remove_background = true;
+    else if (asset(a.asset_image)) out.asset_image = a.asset_image;
+    if (a.remove_background === true && out.image) out.remove_background = true;
+    return out;
+  }
+
+  function serviceArgs(a) {
+    const out = {};
+    for (const [k, max] of [["title", 120], ["lead", 200], ["copy", 600]]) {
+      const v = clip(a[k], max);
+      if (v) out[k] = v;
+    }
+    if (SERVICE_CATEGORIES.includes(a.category)) out.category = a.category;
+    if (image(a.image)) out.image = a.image;
+    else if (asset(a.asset_image)) out.asset_image = a.asset_image;
+    if (a.remove_background === true && out.image) out.remove_background = true;
     return out;
   }
 
@@ -444,36 +578,50 @@ export function acceptActions(calls, site, texts) {
     switch (name) {
       case "set_text": {
         const text = str(a.text, 4000);
-        return keys.has(a.key) && text ? { key: a.key, text: text.replace(/\s+/g, " ") } : null;
+        return validKey(a.key) && text ? { key: a.key, text: text.replace(/\s+/g, " ") } : null;
       }
       case "style_text": {
-        if (!keys.has(a.key)) return null;
+        if (!validKey(a.key)) return null;
         if (a.reset === true) return { key: a.key, reset: true };
         const out = { key: a.key };
         if (typeof a.color === "string" && HEX.test(a.color)) out.color = a.color.toLowerCase();
-        if (typeof a.size === "number" && Number.isFinite(a.size)) out.size = Math.round(Math.min(2.4, Math.max(0.6, a.size)) * 10) / 10;
-        return out.color || out.size ? out : null;
+        const sz = numClamp(a.size, 0.6, 2.4, 1);
+        if (sz !== undefined) out.size = sz;
+        const wd = numClamp(a.width, 10, 100, 1);
+        if (wd !== undefined) out.width = wd;
+        if (a.align === "left" || a.align === "center" || a.align === "right") out.align = a.align;
+        const px = numClamp(a.x, 0, 100, 2);
+        if (px !== undefined) out.x = px;
+        const py = numClamp(a.y, 0, 100, 2);
+        if (py !== undefined) out.y = py;
+        if (a.reset_position === true) out.reset_position = true;
+        return Object.keys(out).length > 1 ? out : null;
       }
       case "move_section": {
         const position = Math.round(Number(a.position));
-        return sections.has(a.section) && position >= 1 ? { section: a.section, position: Math.min(position, site.sections.length) } : null;
+        return sections.has(a.section) && position >= 1 ? { section: a.section, position: Math.min(position, sections.size) } : null;
       }
       case "set_section_visibility":
         return sections.has(a.section) && typeof a.visible === "boolean" ? { section: a.section, visible: a.visible } : null;
-      case "remove_section":
-        return sections.has(a.section) ? { section: a.section } : null;
+      case "remove_section": {
+        if (!sections.has(a.section)) return null;
+        sections.delete(a.section);
+        return { section: a.section };
+      }
       case "add_section": {
         if (BUILTIN_TYPES.includes(a.type)) {
           if (sections.has(a.type)) return null; // already on the page
         } else if (!TEMPLATE_TYPES.includes(a.type)) return null;
+        if (sections.size >= 30) return null;
         const out = { type: a.type, ...templateArgs(a.type, a, true) };
         if (a.type === "blocks") {
           const list = (Array.isArray(a.blocks) ? a.blocks : []).map((b) => b && blockArgs(b, true)).filter(Boolean).slice(0, 40);
           if (list.length) out.blocks = list;
         }
         const position = Math.round(Number(a.position));
-        if (position >= 1) out.position = Math.min(position, site.sections.length + 1);
+        if (position >= 1) out.position = Math.min(position, sections.size + 1);
         if (a.visible === true) out.visible = true;
+        if (BUILTIN_TYPES.includes(a.type)) sections.set(a.type, { id: a.type, type: a.type, hidden: !a.visible });
         return out;
       }
       case "update_section": {
@@ -496,8 +644,10 @@ export function acceptActions(calls, site, texts) {
           : null;
       case "add_product": {
         const p = productArgs(a);
-        if (!(p.title && p.category && p.image)) return null;
-        if (p.code && site.products.some((x) => x.code === p.code)) return null;
+        if (!(p.title && p.category)) return null;
+        if (a.image && !p.image) return null; // explicitly named a missing attachment
+        if (p.code && usedCodes.has(p.code)) return null;
+        if (p.code) usedCodes.add(p.code);
         return p;
       }
       case "update_product": {
@@ -506,8 +656,79 @@ export function acceptActions(calls, site, texts) {
         if (p.code && site.products.some((x) => x.code === p.code && x.id !== a.product)) return null;
         return Object.keys(p).length ? { product: a.product, ...p } : null;
       }
-      case "remove_product":
-        return products.has(a.product) ? { product: a.product } : null;
+      case "remove_product": {
+        if (!products.has(a.product)) return null;
+        products.delete(a.product);
+        return { product: a.product };
+      }
+      case "add_service": {
+        if (services.size >= 6) return null;
+        const sv = serviceArgs(a);
+        if (!(sv.title && sv.lead && sv.copy)) return null;
+        if (!sv.category) sv.category = "all";
+        services.set(`new-${services.size + 1}`, sv);
+        return sv;
+      }
+      case "update_service": {
+        if (!services.has(a.service)) return null;
+        const sv = serviceArgs(a);
+        return Object.keys(sv).length ? { service: a.service, ...sv } : null;
+      }
+      case "remove_service": {
+        if (!services.has(a.service) || services.size <= 1) return null;
+        services.delete(a.service);
+        return { service: a.service };
+      }
+      case "add_sector": {
+        if (sectors.size >= 20) return null;
+        const nm = clip(a.name, 120);
+        if (!nm) return null;
+        const out = { name: nm };
+        if (["agricola", "industrial", "transporte", "construcao", "elevadores", "especiais"].includes(a.icon_type)) out.icon_type = a.icon_type;
+        sectors.set(`new-${sectors.size + 1}`, out);
+        return out;
+      }
+      case "update_sector": {
+        const nm = clip(a.name, 120);
+        return sectors.has(a.sector) && nm ? { sector: a.sector, name: nm } : null;
+      }
+      case "remove_sector": {
+        if (!sectors.has(a.sector)) return null;
+        sectors.delete(a.sector);
+        return { sector: a.sector };
+      }
+      case "add_pillar": {
+        if (pillars.size >= 8) return null;
+        const title = clip(a.title, 60),
+          desc = clip(a.desc, 300);
+        if (!(title && desc)) return null;
+        pillars.set(`new-${pillars.size + 1}`, { title, desc });
+        return { title, desc };
+      }
+      case "update_pillar": {
+        if (!pillars.has(a.pillar)) return null;
+        const out = { pillar: a.pillar };
+        const title = clip(a.title, 60),
+          desc = clip(a.desc, 300);
+        if (title) out.title = title;
+        if (desc) out.desc = desc;
+        return Object.keys(out).length > 1 ? out : null;
+      }
+      case "remove_pillar": {
+        if (!pillars.has(a.pillar) || pillars.size <= 1) return null;
+        pillars.delete(a.pillar);
+        return { pillar: a.pillar };
+      }
+      case "update_process_step": {
+        const step = Math.round(Number(a.step));
+        if (step < 1 || step > 3) return null;
+        const out = { step };
+        for (const [k, max] of [["label", 60], ["title", 120], ["copy", 400]]) {
+          const v = clip(a[k], max);
+          if (v) out[k] = v;
+        }
+        return Object.keys(out).length > 1 ? out : null;
+      }
       case "update_company": {
         const out = {};
         for (const [k, [, max]] of Object.entries(COMPANY_FIELDS)) {
@@ -562,7 +783,7 @@ export function acceptActions(calls, site, texts) {
         return {};
       case "show_on_site":
         if (sections.has(a.section)) return { section: a.section };
-        if (keys.has(a.key)) return { key: a.key };
+        if (validKey(a.key)) return { key: a.key };
         return null;
       default:
         return null;
@@ -575,8 +796,10 @@ const fieldList = (obj, labels) =>
   Object.keys(obj)
     .map((k) => labels[k] ?? k)
     .join(", ");
-const TEMPLATE_LABELS = { nav: "nome no menu", eyebrow: "rótulo", title: "título", accent: "destaque", text: "texto", cta: "botão", button: "botão", quote: "depoimento", author: "autor", role: "cargo", side: "lado da foto", image: "foto", items: "números", photos: "fotos" };
-const PRODUCT_LABELS = { title: "nome", code: "código", category: "categoria", specs: "características", description: "descrição", featured: "destaque", image: "foto", remove_background: "recorte do fundo" };
+const TEMPLATE_LABELS = { nav: "nome no menu", eyebrow: "rótulo", title: "título", accent: "destaque", text: "texto", cta: "botão", button: "botão", quote: "depoimento", author: "autor", role: "cargo", side: "lado da foto", image: "foto", asset_image: "foto do acervo", items: "números", photos: "fotos" };
+const PRODUCT_LABELS = { title: "nome", code: "código", category: "categoria", specs: "características", description: "descrição", featured: "destaque", image: "foto", asset_image: "foto do acervo", remove_background: "recorte do fundo" };
+const SERVICE_LABELS = { title: "título", lead: "destaque", copy: "texto", category: "categoria", image: "foto", asset_image: "foto do acervo", remove_background: "recorte do fundo" };
+const ALIGN_LABELS = { left: "à esquerda", center: "centralizado", right: "à direita" };
 const NETWORK_LABELS = { instagram: "Instagram", facebook: "Facebook", linkedin: "LinkedIn", youtube: "YouTube", tiktok: "TikTok", x: "X", site: "Site" };
 export const TYPE_NAMES = {
   solutions: "Soluções",
@@ -602,14 +825,25 @@ export function describeAction({ name, args: a }, site, texts) {
   const section = (id) => quoted(site.sections.find((b) => b.id === id)?.name ?? id, 40);
   const text = (key) => quoted(texts.find((t) => t.key === key)?.label ?? key, 50);
   const product = (id) => quoted(site.products.find((p) => p.id === id)?.title ?? id, 50);
+  const service = (id) => quoted((site.services ?? []).find((s) => s.id === id)?.title ?? id, 50);
+  const sector = (id) => quoted((site.sectors ?? []).find((s) => s.id === id)?.name ?? id, 50);
+  const pillar = (id) => quoted((site.pillars ?? []).find((p) => p.id === id)?.title ?? id, 50);
   const target = (t) => site.images.find((i) => i.target === t)?.label ?? t;
   switch (name) {
     case "set_text":
       return `Trocar o texto ${text(a.key)}`;
-    case "style_text":
-      return a.reset
-        ? `Voltar ${text(a.key)} à cor e ao tamanho padrão`
-        : `Mudar ${text(a.key)}: ${[a.color && `cor ${a.color}`, a.size && `tamanho ${String(a.size).replace(".", ",")}×`].filter(Boolean).join(", ")}`;
+    case "style_text": {
+      if (a.reset) return `Restaurar ${text(a.key)} ao padrão`;
+      const parts = [
+        a.color && `cor ${a.color}`,
+        a.size && `tamanho ${String(a.size).replace(".", ",")}×`,
+        a.width !== undefined && `largura ${a.width}%`,
+        a.align && `texto ${ALIGN_LABELS[a.align]}`,
+        (a.x !== undefined || a.y !== undefined) && `posição responsiva (${a.x ?? "auto"}% · ${a.y ?? "auto"}%)`,
+        a.reset_position && "posição original",
+      ].filter(Boolean);
+      return `Ajustar ${text(a.key)}: ${parts.join(", ")}`;
+    }
     case "move_section":
       return `Mover a seção ${section(a.section)} para a posição ${a.position}`;
     case "set_section_visibility":
@@ -619,7 +853,7 @@ export function describeAction({ name, args: a }, site, texts) {
       return `${b && BUILTIN_TYPES.includes(b.type) ? "Remover" : "Excluir"} a seção ${section(a.section)}`;
     }
     case "add_section":
-      return `Inserir a seção ${quoted(a.nav ?? TYPE_NAMES[a.type], 40)}${a.position ? ` na posição ${a.position}` : " no fim"}${a.visible ? "" : " (oculta até você mostrar)"}`;
+      return `Inserir a seção ${quoted(a.nav ?? TYPE_NAMES[a.type], 40)}${a.position ? ` na posição ${a.position}` : " no fim"}${a.visible ? " (publicada)" : " (oculta até você mostrar)"}`;
     case "update_section":
       return `Atualizar a seção ${section(a.section)}: ${fieldList(omit(a, "section"), TEMPLATE_LABELS)}`;
     case "rename_section":
@@ -629,11 +863,31 @@ export function describeAction({ name, args: a }, site, texts) {
     case "set_image":
       return `Trocar ${target(a.target)} por ${a.image}${a.remove_background ? " (com recorte do fundo)" : ""}`;
     case "add_product":
-      return `Cadastrar a peça ${quoted(a.title, 50)} (${a.category}) com ${a.image}${a.remove_background ? ", recortando o fundo" : ""}`;
+      return `Cadastrar a peça ${quoted(a.title, 50)} (${a.category})${a.image ? ` com ${a.image}${a.remove_background ? ", recortando o fundo" : ""}` : ""}`;
     case "update_product":
       return `Atualizar a peça ${product(a.product)}: ${fieldList(omit(a, "product"), PRODUCT_LABELS)}`;
     case "remove_product":
       return `Excluir a peça ${product(a.product)}`;
+    case "add_service":
+      return `Adicionar a solução ${quoted(a.title, 50)}`;
+    case "update_service":
+      return `Atualizar a solução ${service(a.service)}: ${fieldList(omit(a, "service"), SERVICE_LABELS)}`;
+    case "remove_service":
+      return `Remover a solução ${service(a.service)}`;
+    case "add_sector":
+      return `Adicionar o segmento ${quoted(a.name, 50)}`;
+    case "update_sector":
+      return `Renomear o segmento ${sector(a.sector)} para ${quoted(a.name, 50)}`;
+    case "remove_sector":
+      return `Remover o segmento ${sector(a.sector)}`;
+    case "add_pillar":
+      return `Adicionar o pilar ${quoted(a.title, 40)}`;
+    case "update_pillar":
+      return `Atualizar o pilar ${pillar(a.pillar)}`;
+    case "remove_pillar":
+      return `Remover o pilar ${pillar(a.pillar)}`;
+    case "update_process_step":
+      return `Atualizar a etapa ${a.step} do Processo`;
     case "update_company":
       return `Atualizar dados da empresa: ${fieldList(a, Object.fromEntries(Object.entries(COMPANY_FIELDS).map(([k, [l]]) => [k, l.toLowerCase()])))}`;
     case "set_social":
@@ -665,9 +919,91 @@ export function describeAction({ name, args: a }, site, texts) {
 const br = (d) => d.split("-").reverse().join("/");
 const omit = (o, k) => Object.fromEntries(Object.entries(o).filter(([x]) => x !== k));
 
+function applyTextKey(c, key, rawText) {
+  const val = String(rawText ?? "").replace(/\s+/g, " ").trim();
+  if (!val) throw Error("O texto não pode ficar vazio.");
+
+  if (key.startsWith("company.")) {
+    const f = key.slice(8);
+    if (!(f in COMPANY_FIELDS)) throw Error("Campo da empresa desconhecido.");
+    return { ...c, company: { ...c.company, [f]: val.slice(0, COMPANY_FIELDS[f][1]) } };
+  }
+  const mService = /^service\.([^.]+)\.(title|lead|copy)$/.exec(key);
+  if (mService) {
+    const [, id, f] = mService;
+    const lim = f === "title" ? 120 : f === "lead" ? 200 : 600;
+    if (!(c.services ?? []).some((s) => s.id === id)) throw Error("Essa solução não existe mais.");
+    return { ...c, services: c.services.map((s) => (s.id === id ? { ...s, [f]: val.slice(0, lim) } : s)) };
+  }
+  const mPillar = /^pillar\.([^.]+)\.(title|desc)$/.exec(key);
+  if (mPillar) {
+    const [, id, f] = mPillar;
+    const lim = f === "title" ? 60 : 300;
+    if (!(c.pillars ?? []).some((p) => p.id === id)) throw Error("Esse pilar não existe mais.");
+    return { ...c, pillars: c.pillars.map((p) => (p.id === id ? { ...p, [f]: val.slice(0, lim) } : p)) };
+  }
+  const mSector = /^sector\.([^.]+)\.name$/.exec(key);
+  if (mSector) {
+    const [, id] = mSector;
+    if (!(c.sectors ?? []).some((s) => s.id === id)) throw Error("Esse segmento não existe mais.");
+    return { ...c, sectors: c.sectors.map((s) => (s.id === id ? { ...s, name: val.slice(0, 120) } : s)) };
+  }
+  const mProc = /^process\.([012])\.(label|title|copy)$/.exec(key);
+  if (mProc) {
+    const idx = Number(mProc[1]);
+    const f = mProc[2];
+    const lim = f === "label" ? 60 : f === "title" ? 120 : 400;
+    return { ...c, process: c.process.map((st, i) => (i === idx ? { ...st, [f]: val.slice(0, lim) } : st)) };
+  }
+  if (key.startsWith("block.")) {
+    const parts = key.split(".");
+    const secId = parts[1];
+    const sec = c.layout.find((b) => b.id === secId);
+    if (!sec || !sec.data) throw Error("Essa seção não existe mais.");
+    const updateSec = (data) => ({ ...c, layout: c.layout.map((b) => (b.id === secId ? { ...b, data } : b)) });
+    if (parts[2] === "items" && parts.length === 5) {
+      const idx = Number(parts[3]),
+        f = parts[4];
+      const lim = f === "value" ? 40 : 200;
+      const items = (sec.data.items ?? []).map((it, i) => (i === idx ? { ...it, [f]: val.slice(0, lim) } : it));
+      return updateSec({ ...sec.data, items });
+    }
+    if (parts[2] === "images" && parts[4] === "caption") {
+      const idx = Number(parts[3]);
+      const images = (sec.data.images ?? []).map((im, i) => (i === idx ? { ...im, caption: val.slice(0, 200) } : im));
+      return updateSec({ ...sec.data, images });
+    }
+    if (sec.type === "blocks" && parts.length >= 4) {
+      const blkId = parts[2];
+      const blocks = (sec.data.blocks ?? []).map((ub) => {
+        if (ub.id !== blkId) return ub;
+        if (parts[3] === "items" && parts.length === 6) {
+          const idx = Number(parts[4]),
+            f = parts[5];
+          const lim = f === "value" ? 40 : f === "title" ? 80 : f === "label" ? 200 : 300;
+          return { ...ub, items: (ub.items ?? []).map((it, i) => (i === idx ? { ...it, [f]: val.slice(0, lim) } : it)) };
+        }
+        const f = parts[3];
+        const max = typeof BLOCK_SPEC[ub.kind]?.[f] === "number" ? BLOCK_SPEC[ub.kind][f] : 1200;
+        return { ...ub, [f]: val.slice(0, max) };
+      });
+      return updateSec({ ...sec.data, blocks });
+    }
+    if (parts.length === 3) {
+      const f = parts[2];
+      const rule = TEMPLATE_FIELDS[sec.type]?.[f];
+      const max = typeof rule === "number" ? rule : 1200;
+      return updateSec({ ...sec.data, [f]: val.slice(0, max) });
+    }
+  }
+  if (/^[a-z0-9][a-z0-9._-]{0,59}$/.test(key)) {
+    return { ...c, copy: { ...(c.copy ?? {}), [key]: val.slice(0, 1200) } };
+  }
+  throw Error("Chave de texto inválida.");
+}
+
 /**
- * Applies one action to the content, purely. Text changes (set_text) and the review are run by
- * the editor itself; photos must already be uploaded: `ctx.url(attachmentId)` gives their URL.
+ * Applies one action to the content, purely. Photos must already be uploaded: `ctx.url(attachmentId)` gives their URL.
  * @param {any} c current content
  * @param {{ name: string, args: any }} action
  * @param {{ url: (id: string, removeBg?: boolean) => string | undefined, templateData: (type: string) => Record<string, unknown>, newId: () => string, sectionName: (b: any) => string }} ctx
@@ -686,18 +1022,44 @@ export function applyAction(c, { name, args: a }, ctx) {
     const d = { ...base };
     for (const [k, v] of Object.entries(a)) {
       if (k === "image") d.imageUrl = photo(v);
+      else if (k === "asset_image") d.imageUrl = v;
       else if (k === "photos") d.images = v.map((p) => ({ url: photo(p.image), caption: p.caption || "Legenda da foto" }));
-      else if (k === "blocks") d.blocks = v.map(({ image, ...b }) => ({ id: ctx.newId(), ...b, ...(image ? { url: photo(image) } : {}) }));
+      else if (k === "blocks")
+        d.blocks = v.map(({ image, asset_image, ...b }) => ({
+          id: ctx.newId(),
+          ...b,
+          ...(image ? { url: photo(image) } : asset_image ? { url: asset_image } : {}),
+        }));
       else if (TEMPLATE_FIELDS[type][k]) d[k] = v;
     }
     return d;
   };
   switch (name) {
+    case "set_text":
+      return { content: applyTextKey(c, a.key, a.text), label: "Texto alterado" };
     case "style_text": {
       const styles = { ...c.styles };
-      if (a.reset) delete styles[a.key];
-      else styles[a.key] = { ...styles[a.key], ...(a.color ? { color: a.color } : {}), ...(a.size ? { size: a.size } : {}) };
-      return { content: { ...c, styles }, label: a.reset ? "Estilo do texto restaurado" : "Estilo do texto alterado" };
+      if (a.reset) {
+        delete styles[a.key];
+        return { content: { ...c, styles }, label: "Estilo do texto restaurado" };
+      }
+      const next = { ...(styles[a.key] ?? {}) };
+      if (a.reset_position) {
+        delete next.x;
+        delete next.y;
+      }
+      if (a.color) next.color = a.color;
+      if (a.size !== undefined) {
+        if (Math.abs(a.size - 1) <= 0.001) delete next.size;
+        else next.size = a.size;
+      }
+      if (a.width !== undefined) next.width = a.width;
+      if (a.align) next.align = a.align;
+      if (a.x !== undefined) next.x = a.x;
+      if (a.y !== undefined) next.y = a.y;
+      if (Object.keys(next).length) styles[a.key] = next;
+      else delete styles[a.key];
+      return { content: { ...c, styles }, label: "Estilo/posição do texto alterado" };
     }
     case "move_section": {
       const b = findSection(a.section);
@@ -773,6 +1135,7 @@ export function applyAction(c, { name, args: a }, ctx) {
     }
     case "add_product": {
       if (a.code && c.products.some((p) => p.code === a.code)) fail(`Já existe uma peça com o código ${a.code}.`);
+      const imageUrl = a.image ? photo(a.image, a.remove_background) : a.asset_image || DEFAULT_PART_ASSET(a.category);
       const p = {
         id: ctx.newId(),
         code: a.code || nextCode(a.category, c.products.map((x) => x.code)),
@@ -781,7 +1144,7 @@ export function applyAction(c, { name, args: a }, ctx) {
         featured: a.featured ?? false,
         specs: a.specs ?? "Usinagem CNC • Sob medida",
         description: a.description ?? "Componente fabricado sob medida pela Usibar Usinagens Especiais.",
-        imageUrl: photo(a.image, a.remove_background),
+        imageUrl,
       };
       return { content: { ...c, products: [p, ...c.products] }, label: `Peça “${p.title}” cadastrada` };
     }
@@ -791,11 +1154,80 @@ export function applyAction(c, { name, args: a }, ctx) {
       const next = { ...p };
       for (const k of ["title", "code", "category", "specs", "description", "featured"]) if (k in a) next[k] = a[k];
       if (a.image) next.imageUrl = photo(a.image, a.remove_background);
+      else if (a.asset_image) next.imageUrl = a.asset_image;
       return { content: { ...c, products: c.products.map((x) => (x.id === p.id ? next : x)) }, label: `Peça “${next.title}” atualizada` };
     }
     case "remove_product": {
       const p = findProduct(a.product);
       return { content: { ...c, products: c.products.filter((x) => x.id !== p.id) }, label: `Peça “${p.title}” excluída` };
+    }
+    case "add_service": {
+      const list = c.services ?? [];
+      if (list.length >= 6) fail("A seção Soluções já tem o máximo de 6 cartões.");
+      const cat = a.category ?? "all";
+      const imageUrl = a.image ? photo(a.image, a.remove_background ?? true) : a.asset_image || DEFAULT_PART_ASSET(cat);
+      const sv = { id: ctx.newId(), category: cat, title: a.title, lead: a.lead, copy: a.copy, imageUrl };
+      return { content: { ...c, services: [...list, sv] }, label: `Solução “${sv.title}” adicionada` };
+    }
+    case "update_service": {
+      const list = c.services ?? [];
+      const cur = list.find((s) => s.id === a.service) ?? fail("Essa solução não existe mais.");
+      const next = { ...cur };
+      for (const k of ["title", "lead", "copy", "category"]) if (k in a) next[k] = a[k];
+      if (a.image) next.imageUrl = photo(a.image, a.remove_background ?? true);
+      else if (a.asset_image) next.imageUrl = a.asset_image;
+      return { content: { ...c, services: list.map((s) => (s.id === cur.id ? next : s)) }, label: `Solução “${next.title}” atualizada` };
+    }
+    case "remove_service": {
+      const list = c.services ?? [];
+      const cur = list.find((s) => s.id === a.service) ?? fail("Essa solução não existe mais.");
+      if (list.length <= 1) fail("Mantenha pelo menos uma solução na seção.");
+      return { content: { ...c, services: list.filter((s) => s.id !== cur.id) }, label: `Solução “${cur.title}” removida` };
+    }
+    case "add_sector": {
+      const list = c.sectors ?? [];
+      if (list.length >= 20) fail("Limite de 20 segmentos atingido.");
+      const baseId = a.icon_type && !list.some((s) => s.id === a.icon_type) ? a.icon_type : ctx.newId();
+      let n = list.length + 1;
+      const codes = new Set(list.map((s) => s.code));
+      while (codes.has(`SEC-${String(n).padStart(2, "0")}`)) n++;
+      const sec = { id: baseId, name: a.name, code: `SEC-${String(n).padStart(2, "0")}` };
+      return { content: { ...c, sectors: [...list, sec] }, label: `Segmento “${sec.name}” adicionado` };
+    }
+    case "update_sector": {
+      const list = c.sectors ?? [];
+      const cur = list.find((s) => s.id === a.sector) ?? fail("Esse segmento não existe mais.");
+      return { content: { ...c, sectors: list.map((s) => (s.id === cur.id ? { ...s, name: a.name } : s)) }, label: `Segmento “${a.name}” atualizado` };
+    }
+    case "remove_sector": {
+      const list = c.sectors ?? [];
+      const cur = list.find((s) => s.id === a.sector) ?? fail("Esse segmento não existe mais.");
+      return { content: { ...c, sectors: list.filter((s) => s.id !== cur.id) }, label: `Segmento “${cur.name}” removido` };
+    }
+    case "add_pillar": {
+      const list = c.pillars ?? [];
+      if (list.length >= 8) fail("Limite de 8 pilares atingido.");
+      const pil = { id: ctx.newId(), title: a.title, desc: a.desc };
+      return { content: { ...c, pillars: [...list, pil] }, label: `Pilar “${pil.title}” adicionado` };
+    }
+    case "update_pillar": {
+      const list = c.pillars ?? [];
+      const cur = list.find((p) => p.id === a.pillar) ?? fail("Esse pilar não existe mais.");
+      const next = { ...cur, ...(a.title ? { title: a.title } : {}), ...(a.desc ? { desc: a.desc } : {}) };
+      return { content: { ...c, pillars: list.map((p) => (p.id === cur.id ? next : p)) }, label: `Pilar “${next.title}” atualizado` };
+    }
+    case "remove_pillar": {
+      const list = c.pillars ?? [];
+      const cur = list.find((p) => p.id === a.pillar) ?? fail("Esse pilar não existe mais.");
+      if (list.length <= 1) fail("Mantenha pelo menos um pilar.");
+      return { content: { ...c, pillars: list.filter((p) => p.id !== cur.id) }, label: `Pilar “${cur.title}” removido` };
+    }
+    case "update_process_step": {
+      const idx = a.step - 1;
+      if (!c.process?.[idx]) fail("Etapa do processo inválida.");
+      const cur = c.process[idx];
+      const next = { ...cur, ...(a.label ? { label: a.label } : {}), ...(a.title ? { title: a.title } : {}), ...(a.copy ? { copy: a.copy } : {}) };
+      return { content: { ...c, process: c.process.map((s, i) => (i === idx ? next : s)) }, label: `Etapa ${a.step} do Processo atualizada` };
     }
     case "update_company":
       return { content: { ...c, company: { ...c.company, ...a } }, label: "Dados da empresa alterados" };
@@ -808,8 +1240,8 @@ export function applyAction(c, { name, args: a }, ctx) {
       const list = [...(b.data?.blocks ?? [])];
       const at = list.findIndex((x) => x.id === a.block);
       if (name !== "add_block" && at < 0) fail("Esse bloco não existe mais.");
-      const { section, block, position, image, ...fields } = a;
-      const withImage = (x) => (image ? { ...x, url: photo(image) } : x);
+      const { section, block, position, image, asset_image, ...fields } = a;
+      const withImage = (x) => (image ? { ...x, url: photo(image) } : asset_image ? { ...x, url: asset_image } : x);
       if (name === "add_block") {
         const nb = withImage({ id: ctx.newId(), ...fields });
         const i = position ? Math.max(0, Math.min(list.length, position - 1)) : list.length;

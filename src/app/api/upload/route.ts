@@ -51,7 +51,7 @@ export async function POST(req: Request) {
         raw: { width: info.width, height: info.height, channels: 4 },
       });
     }
-    const webp = await pipeline.webp({ quality: 80 }).toBuffer();
+    const webp = await pipeline.webp({ quality: 90, alphaQuality: 100 }).toBuffer();
     if (webp.length > MAX_RESULT)
       return NextResponse.json(
         { error: "A imagem continua acima de 1 MB depois da compressão. Use uma foto menor ou mais simples." },

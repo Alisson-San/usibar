@@ -195,3 +195,54 @@ test("assistant: free section with blocks, block edits, elements and notice stay
   assert.equal(acceptActions([{ name: "set_notice", args: { enabled: true, start: "2027-01-05", end: "2026-12-22" } }], site2, texts).actions.length, 0);
   assert.equal(acceptActions([{ name: "set_element_visibility", args: { key: "inventado", visible: false } }], site2, texts).actions.length, 0);
 });
+
+test("assistant autonomy: multi-task batch, photo-less cadastros, structured CRUD and responsive text layout", () => {
+  const fullSite = {
+    ...site,
+    services: content.services.map(({ id, title, lead, copy, category }) => ({ id, title, lead, copy, category })),
+    sectors: content.sectors.map(({ id, name, code }) => ({ id, name, code })),
+    pillars: content.pillars.map(({ id, title, desc }) => ({ id, title, desc })),
+    process: content.process,
+  };
+  const calls = [
+    { name: "add_product", args: { title: "Cilindro de dupla ação agrícola", category: "cilindros", featured: true } },
+    { name: "add_product", args: { title: "Bloco manifold especial 6 vias", category: "blocos", asset_image: "/assets/bloco-manifold-longo.webp" } },
+    { name: "add_service", args: { title: "Usinagem CNC seriada", lead: "Peças técnicas sob desenho", copy: "Produção seriada conforme projeto.", category: "all" } },
+    { name: "update_service", args: { service: content.services[0].id, lead: "Simples e dupla ação sob medida" } },
+    { name: "add_sector", args: { name: "Mineração pesada", icon_type: "industrial" } },
+    { name: "update_sector", args: { sector: content.sectors[0].id, name: "Implementos agrícolas" } },
+    { name: "add_pillar", args: { title: "Rastreabilidade", desc: "Controle dimensional em todas as etapas." } },
+    { name: "update_pillar", args: { pillar: content.pillars[0].id, desc: "Projetos dedicados à sua aplicação." } },
+    { name: "update_process_step", args: { step: 2, title: "Usinagem CNC de precisão." } },
+    { name: "set_text", args: { key: "hero.title.1", text: "CILINDROS ESPECIAIS" } },
+    { name: "set_text", args: { key: "company.motto", text: "Força, precisão e desempenho sob medida." } },
+    { name: "style_text", args: { key: "hero.title.1", width: 88, align: "right", x: 100, y: 0 } },
+  ];
+  const { actions, dropped } = acceptActions(calls, fullSite, texts);
+  assert.equal(dropped, 0);
+  assert.equal(actions.length, calls.length);
+
+  let cur = content;
+  for (const action of actions) {
+    assert.ok(describeAction(action, fullSite, texts).length > 5);
+    cur = applyAction(cur, action, ctx).content;
+    assert.equal(validData(cur), true, `${action.name} keeps content valid`);
+  }
+
+  assert.equal(cur.products.length, content.products.length + 2);
+  assert.notEqual(cur.products[0].code, cur.products[1].code);
+  assert.equal(cur.products[0].imageUrl, "/assets/bloco-manifold-longo.webp");
+  assert.equal(cur.services.length, content.services.length + 1);
+  assert.equal(cur.sectors.at(-1).name, "Mineração pesada");
+  assert.equal(cur.pillars.at(-1).title, "Rastreabilidade");
+  assert.equal(cur.process[1].title, "Usinagem CNC de precisão.");
+  assert.equal(cur.copy["hero.title.1"], "CILINDROS ESPECIAIS");
+  assert.equal(cur.company.motto, "Força, precisão e desempenho sob medida.");
+  assert.deepEqual(cur.styles["hero.title.1"], { width: 88, align: "right", x: 100, y: 0 });
+
+  // Resetting position keeps width/align intact
+  const resetPos = acceptActions([{ name: "style_text", args: { key: "hero.title.1", reset_position: true } }], fullSite, texts).actions[0];
+  cur = applyAction(cur, resetPos, ctx).content;
+  assert.deepEqual(cur.styles["hero.title.1"], { width: 88, align: "right" });
+  assert.equal(validData(cur), true);
+});

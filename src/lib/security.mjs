@@ -182,8 +182,10 @@ function unique(list) {
 }
 
 const KEY = /^[a-z0-9][a-z0-9._-]{0,79}$/i;
-// Per-text colour and size chosen in the editor: { "hero.title.1": { color: "#bf4f29", size: 1.2 } }.
-function validStyles(styles) {
+const STYLE_KEYS = ["color", "size", "width", "align", "x", "y"];
+const numIn = (v, min, max) => typeof v === "number" && Number.isFinite(v) && v >= min && v <= max;
+// Per-text colour, size, responsive width (%) and responsive section anchor coordinates (x/y 0..100).
+export function validStyles(styles) {
   if (!styles || typeof styles !== "object" || Array.isArray(styles)) return false;
   const entries = Object.entries(styles);
   return (
@@ -193,9 +195,14 @@ function validStyles(styles) {
         KEY.test(k) &&
         v &&
         typeof v === "object" &&
-        Object.keys(v).every((f) => f === "color" || f === "size") &&
+        !Array.isArray(v) &&
+        Object.keys(v).every((f) => STYLE_KEYS.includes(f)) &&
         (v.color === undefined || (typeof v.color === "string" && /^#[0-9a-f]{6}$/i.test(v.color))) &&
-        (v.size === undefined || (typeof v.size === "number" && v.size >= 0.5 && v.size <= 3)),
+        (v.size === undefined || numIn(v.size, 0.5, 3)) &&
+        (v.width === undefined || numIn(v.width, 10, 100)) &&
+        (v.align === undefined || v.align === "left" || v.align === "center" || v.align === "right") &&
+        (v.x === undefined || numIn(v.x, 0, 100)) &&
+        (v.y === undefined || numIn(v.y, 0, 100)),
     )
   );
 }

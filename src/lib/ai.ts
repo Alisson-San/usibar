@@ -83,7 +83,21 @@ export async function reviewPage(fields: { key: string; label: string; text: str
 }
 
 type ChatMessage = { role: "user" | "assistant"; text?: string; images?: { mimeType: string; data: string }[] };
-type Site = { sections: unknown[]; products: unknown[]; images: unknown[]; attachments: unknown[]; company: Record<string, string>; socials?: unknown[] };
+type Site = {
+  sections: unknown[];
+  products: unknown[];
+  services?: unknown[];
+  sectors?: unknown[];
+  pillars?: unknown[];
+  process?: unknown[];
+  styles?: Record<string, unknown>;
+  removables?: unknown[];
+  notice?: unknown;
+  images: unknown[];
+  attachments: unknown[];
+  company: Record<string, string>;
+  socials?: unknown[];
+};
 type Text = { key: string; label: string; text: string };
 
 // One turn of the editing chat: the reply plus the actions proposed, already checked against the site.

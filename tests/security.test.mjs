@@ -131,12 +131,27 @@ test("reject unknown social network", () =>
   ));
 test("reject malformed text keys", () =>
   assert.equal(validData({ ...publicData, copy: { "<b>": "x" } }), false));
-test("accept text colours and sizes", () =>
-  assert.equal(validData({ ...publicData, styles: { "hero.title.1": { color: "#bf4f29", size: 1.2 } } }), true));
-test("reject style with script or odd size", () => {
+test("accept text colours, sizes, stretched widths and responsive positions", () =>
+  assert.equal(
+    validData({
+      ...publicData,
+      styles: {
+        "hero.title.1": { color: "#bf4f29", size: 1.2 },
+        "hero.note": { width: 85, align: "right", x: 100, y: 0 },
+        "origin.eyebrow": { x: 0, y: 100, align: "left" },
+      },
+    }),
+    true,
+  ));
+test("reject style with script, odd size or out-of-bounds width/position", () => {
   assert.equal(validData({ ...publicData, styles: { a: { color: "red;background:url(x)" } } }), false);
   assert.equal(validData({ ...publicData, styles: { a: { size: 40 } } }), false);
   assert.equal(validData({ ...publicData, styles: { a: { color: "#000000", font: "x" } } }), false);
+  assert.equal(validData({ ...publicData, styles: { a: { width: 5 } } }), false);
+  assert.equal(validData({ ...publicData, styles: { a: { width: 105 } } }), false);
+  assert.equal(validData({ ...publicData, styles: { a: { align: "justify" } } }), false);
+  assert.equal(validData({ ...publicData, styles: { a: { x: -1 } } }), false);
+  assert.equal(validData({ ...publicData, styles: { a: { y: 101 } } }), false);
 });
 test("accept reordered built-in and template sections", () =>
   assert.equal(

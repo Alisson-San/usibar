@@ -1,5 +1,5 @@
 "use client";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type Lenis from "lenis";
@@ -11,7 +11,7 @@ import {
   sceneTimeline,
   type SceneTimeline,
 } from "./EngineeringScene";
-import { CopyContext, Editable, Removable, styleOf, T } from "./copy";
+import { Editable, Removable, T } from "./copy";
 
 export type Step = { label: string; title: string; copy: string };
 
@@ -52,7 +52,6 @@ export function ProcessSection({
   lenis: React.RefObject<Lenis | null>;
   onEdit: (index: number, key: keyof Step, value: string) => void;
 }) {
-  const { styles } = useContext(CopyContext);
   const spacer = useRef<HTMLDivElement>(null),
     section = useRef<HTMLElement>(null),
     frame = useRef<HTMLDivElement>(null),
@@ -135,20 +134,17 @@ export function ProcessSection({
     else window.scrollTo({ top: target, behavior: "smooth" });
   }
 
-  const field = (i: number, key: keyof Step, kind: "w" | "t", label: string) =>
-    editing ? (
-      <Editable
-        value={steps[i][key]}
-        editing
-        label={`Etapa ${i + 1} — ${label}`}
-        styleKey={`process.${i}.${key}`}
-        onCommit={(v) => onEdit(i, key, v)}
-      />
-    ) : (
-      <span style={styleOf(styles[`process.${i}.${key}`])}>
-        <Words text={steps[i][key]} kind={kind} />
-      </span>
-    );
+  const field = (i: number, key: keyof Step, kind: "w" | "t", label: string) => (
+    <Editable
+      value={steps[i][key]}
+      editing={editing}
+      label={`Etapa ${i + 1} — ${label}`}
+      styleKey={`process.${i}.${key}`}
+      onCommit={(v) => onEdit(i, key, v)}
+    >
+      <Words text={steps[i][key]} kind={kind} />
+    </Editable>
+  );
 
   return (
     <div className="pin-host" ref={spacer}>
