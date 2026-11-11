@@ -1,8 +1,14 @@
 import sharp from "sharp";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { removeBackground } from "./src/lib/cutout.mjs";
 const out = path.join(process.cwd(), "public/assets");
 await fs.mkdir(out, { recursive: true });
+const keepBackground = new Set([
+  "logo-usibar-light.webp",
+  "logo-usibar-dark.webp",
+  "hero-bench.webp",
+]);
 const mapping = {
   "logo-usibar-light.webp": ["image_14.jpg", "image_14.png"],
   "logo-usibar-dark.webp": ["image_14.jpg", "image_14.png"],
@@ -30,17 +36,27 @@ for (const [output, names] of Object.entries(mapping)) {
     if (input) break;
   }
   if (input) {
-    await sharp(input)
+    let pipeline = sharp(input)
       .rotate()
-      .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 96 })
+      .resize(1600, 1600, { fit: "inside", withoutEnlargement: true });
+    if (!keepBackground.has(output)) {
+      const { data, info } = await pipeline
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      pipeline = sharp(removeBackground(data, info.width, info.height), {
+        raw: { width: info.width, height: info.height, channels: 4 },
+      });
+    }
+    await pipeline
+      .webp({ quality: 96, alphaQuality: 100 })
       .toFile(path.join(out, output));
     console.log("Fotografia preservada:", output);
   } else {
     const svg = Buffer.from(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="460"><rect width="800" height="460" fill="white"/><g fill="none" stroke="#aaa99d" stroke-width="1"><rect x="285" y="95" width="230" height="210"/><path d="M260 200h280M400 70v260"/><circle cx="400" cy="200" r="80"/></g><text x="400" y="360" text-anchor="middle" fill="#686b60" font-family="sans-serif" font-size="20">Fotografia em preparação</text><text x="400" y="391" text-anchor="middle" fill="#99998f" font-family="sans-serif" font-size="12">COMPONENTE FABRICADO SOB PROJETO</text></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="460"><g fill="none" stroke="#aaa99d" stroke-width="1"><rect x="285" y="95" width="230" height="210"/><path d="M260 200h280M400 70v260"/><circle cx="400" cy="200" r="80"/></g><text x="400" y="360" text-anchor="middle" fill="#686b60" font-family="sans-serif" font-size="20">Fotografia em preparação</text><text x="400" y="391" text-anchor="middle" fill="#99998f" font-family="sans-serif" font-size="12">COMPONENTE FABRICADO SOB PROJETO</text></svg>',
     );
-    await sharp(svg).webp().toFile(path.join(out, output));
+    await sharp(svg).webp({ alphaQuality: 100 }).toFile(path.join(out, output));
     console.log("Fotografia pendente:", output);
   }
 }

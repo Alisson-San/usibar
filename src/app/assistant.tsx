@@ -2,7 +2,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { authFetch } from "@/lib/browser-auth";
-import { CopyContext, type TextStyle } from "./copy";
+import { cleanTextStyle, CopyContext, type TextAlign, type TextStyle } from "./copy";
 
 // Brand colours first; the picker covers anything else.
 const SWATCHES: [string, string][] = [
@@ -37,12 +37,12 @@ export async function askAi<T>(body: Record<string, unknown>): Promise<T> {
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
-/* Floating toolbar for the text being edited: colour, size and AI rewrites. */
+/* Floating toolbar for the text being edited: colour, size, responsive width/position and AI rewrites. */
 export function TextToolbar({ ai }: { ai: AiStatus }) {
   const { active, activate, styles, setStyle } = useContext(CopyContext);
   const bar = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; below: boolean } | null>(null);
-  const [panel, setPanel] = useState<"none" | "ai">("none");
+  const [panel, setPanel] = useState<"none" | "layout" | "ai">("none");
   const [busy, setBusy] = useState(false);
   const [instruction, setInstruction] = useState("");
   const [proposal, setProposal] = useState<{ text: string; note: string; action: string } | null>(null);
@@ -58,10 +58,10 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
     const place = () => {
       const r = active.el.getBoundingClientRect();
       const h = bar.current?.offsetHeight ?? 52;
-      const w = bar.current?.offsetWidth ?? 420;
+      const w = bar.current?.offsetWidth ?? 480;
       const below = r.top < h + 90;
       setPos({
-        top: below ? r.bottom + 10 : r.top - h - 10,
+        top: below ? Math.min(innerHeight - h - 12, r.bottom + 12) : Math.max(12, r.top - h - 12),
         left: Math.max(12, Math.min(innerWidth - w - 12, r.left)),
         below,
       });
@@ -71,7 +71,7 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
     const outside = (e: PointerEvent) => {
       const t = e.target as Node;
       if (bar.current?.contains(t) || active.el.contains(t)) return;
-      if ((t as HTMLElement).closest?.(".editable")) return; // another field takes over on focus
+      if ((t as HTMLElement).closest?.(".editable, .editable-box")) return; // handles or another field
       activate(null);
     };
     const esc = (e: KeyboardEvent) => e.key === "Escape" && !active.el.matches(":focus") && activate(null);
@@ -87,12 +87,15 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
   if (!active || !pos) return null;
   const style: TextStyle = styles[active.key] ?? {};
   const size = style.size ?? 1;
+  const hasAny = Boolean(style.color || style.size || style.width !== undefined || style.align || style.x !== undefined || style.y !== undefined);
+  const hasBox = Boolean(style.width !== undefined || style.align || style.x !== undefined || style.y !== undefined);
+  const inInteractive = Boolean(active.el.parentElement?.closest("a, button"));
   const apply = (next: TextStyle) => {
-    const clean: TextStyle = {};
-    if (next.color) clean.color = next.color;
-    if (next.size && Math.abs(next.size - 1) > 0.001) clean.size = round(next.size);
-    setStyle(active.key, clean.color || clean.size ? clean : null, active.label);
+    const cleaned = cleanTextStyle({ ...next, size: next.size ? round(next.size) : undefined });
+    setStyle(active.key, cleaned, active.label);
   };
+  const setAlign = (align?: TextAlign) => apply({ ...style, align: style.align === align ? undefined : align });
+
   async function run(action: string) {
     setBusy(true);
     setError("");
@@ -154,7 +157,15 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
             A+
           </button>
         </div>
-        {(style.color || style.size) && (
+        <button
+          className={"tt-layout" + (panel === "layout" || hasBox ? " on" : "")}
+          aria-expanded={panel === "layout"}
+          title="Esticar largura, alinhar ou reposicionar responsivamente"
+          onClick={() => setPanel(panel === "layout" ? "none" : "layout")}
+        >
+          ⇔ Espaço{style.width ? ` ${Math.round(style.width)}%` : ""}
+        </button>
+        {hasAny && (
           <button className="tt-reset" onClick={() => apply({})}>
             Restaurar
           </button>
@@ -163,6 +174,68 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
           ✦ IA
         </button>
       </div>
+      {panel === "layout" && (
+        <div className="tt-panel tt-layout-panel">
+          <div className="tt-layout-row">
+            <span className="tiny-mono">Largura na seção</span>
+            <input
+              type="range"
+              min={15}
+              max={100}
+              step={1}
+              value={Math.round(style.width ?? 50)}
+              aria-label="Largura do bloco na seção"
+              onChange={(e) => apply({ ...style, width: Number(e.target.value) })}
+            />
+            <span className="tt-size">{style.width !== undefined ? `${Math.round(style.width)}%` : "Auto"}</span>
+            {style.width !== undefined && (
+              <button onClick={() => apply({ ...style, width: undefined })} title="Voltar à largura automática">
+                Auto
+              </button>
+            )}
+          </div>
+          <div className="tt-layout-row">
+            <span className="tiny-mono">Alinhamento</span>
+            <div className="tt-actions">
+              {([
+                ["left", "Esquerda"],
+                ["center", "Centro"],
+                ["right", "Direita"],
+              ] as const).map(([al, lbl]) => (
+                <button key={al} className={style.align === al ? "primary" : ""} aria-pressed={style.align === al} onClick={() => setAlign(al)}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+          {!inInteractive && (
+            <div className="tt-layout-row">
+              <span className="tiny-mono">Posição responsiva</span>
+              <div className="tt-actions">
+                <button onClick={() => apply({ ...style, x: 0 })} className={style.x === 0 ? "primary" : ""} title="Encostar bem ao canto esquerdo em qualquer tela">
+                  ⇤ Canto esq.
+                </button>
+                <button onClick={() => apply({ ...style, x: 50 })} className={style.x === 50 ? "primary" : ""} title="Centralizar horizontalmente">
+                  ↔ Centro
+                </button>
+                <button onClick={() => apply({ ...style, x: 100 })} className={style.x === 100 ? "primary" : ""} title="Encostar bem ao canto direito em qualquer tela">
+                  Canto dir. ⇥
+                </button>
+                <button onClick={() => apply({ ...style, y: 0 })} className={style.y === 0 ? "primary" : ""} title="Fixar no topo da seção">
+                  ⤒ Topo
+                </button>
+                <button onClick={() => apply({ ...style, y: 100 })} className={style.y === 100 ? "primary" : ""} title="Fixar na base da seção">
+                  ⤓ Base
+                </button>
+                {(style.x !== undefined || style.y !== undefined) && (
+                  <button onClick={() => apply({ ...style, x: undefined, y: undefined })}>↺ Fluxo original</button>
+                )}
+              </div>
+              <small>Dica: você também pode arrastar as bordas laterais do texto para esticá-lo ou o ícone ✥ para levá-lo a qualquer canto.</small>
+            </div>
+          )}
+        </div>
+      )}
       {panel === "ai" && (
         <div className="tt-panel">
           {!ai?.configured ? (

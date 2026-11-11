@@ -1,4 +1,17 @@
-import { BLOCK_KINDS, BLOCK_NAMES, BUILTIN_TYPES, CHAT_TOOLS, COMPANY_FIELDS, ICON_NAMES, SOCIALS, TEMPLATE_TYPES, TYPE_NAMES } from "./site-actions.mjs";
+import { validStyles } from "./security.mjs";
+import {
+  ASSET_IMAGES,
+  BLOCK_KINDS,
+  BLOCK_NAMES,
+  BUILTIN_TYPES,
+  CHAT_TOOLS,
+  COMPANY_FIELDS,
+  ICON_NAMES,
+  SERVICE_CATEGORIES,
+  SOCIALS,
+  TEMPLATE_TYPES,
+  TYPE_NAMES,
+} from "./site-actions.mjs";
 
 // Rules for the AI copy assistant that do not depend on the model client: what a request may
 // contain, and what of the model's answer may reach the editor. The assistant only proposes;
@@ -247,7 +260,32 @@ export function validateChatRequest(body) {
     ) &&
     list(site.removables ?? [], 200, (r) => shortStr(r.key, 80) && shortStr(r.label, 120) && typeof r.hidden === "boolean") &&
     (site.notice === undefined || (typeof site.notice === "object" && JSON.stringify(site.notice).length <= 2000)) &&
-    list(site.products, CHAT.products, (p) => shortStr(p.id, 80) && shortStr(p.code, 40) && shortStr(p.title, 200) && shortStr(p.category, 20) && typeof p.featured === "boolean") &&
+    list(
+      site.products,
+      CHAT.products,
+      (p) =>
+        shortStr(p.id, 80) &&
+        shortStr(p.code, 40) &&
+        shortStr(p.title, 200) &&
+        shortStr(p.category, 20) &&
+        typeof p.featured === "boolean" &&
+        shortStr(p.specs ?? "", 300) &&
+        shortStr(p.description ?? "", 1200),
+    ) &&
+    list(
+      site.services ?? [],
+      10,
+      (s) =>
+        shortStr(s.id, 80) &&
+        shortStr(s.title, 200) &&
+        shortStr(s.lead ?? "", 300) &&
+        shortStr(s.copy ?? "", 1200) &&
+        SERVICE_CATEGORIES.includes(s.category),
+    ) &&
+    list(site.sectors ?? [], 20, (s) => shortStr(s.id, 80) && shortStr(s.name, 120) && shortStr(s.code ?? "", 40)) &&
+    list(site.pillars ?? [], 8, (p) => shortStr(p.id, 80) && shortStr(p.title, 120) && shortStr(p.desc ?? "", 400)) &&
+    list(site.process ?? [], 3, (p) => shortStr(p.label, 80) && shortStr(p.title, 200) && shortStr(p.copy ?? "", 600)) &&
+    (site.styles === undefined || validStyles(site.styles)) &&
     list(site.images, CHAT.targets, (i) => shortStr(i.target, 120) && shortStr(i.label, 120)) &&
     list(site.attachments, CHAT.attachments, (a) => /^foto-\d{1,2}$/.test(a.id) && shortStr(a.name, 120)) &&
     list(site.socials ?? [], 10, (x) => SOCIALS.includes(x.network) && shortStr(x.url, 300)) &&
@@ -271,7 +309,24 @@ export function siteState(site, texts) {
   const missing = BUILTIN_TYPES.filter((t) => !site.sections.some((b) => b.type === t));
   if (missing.length) lines.push(`Seções fixas fora da página (podem ser recolocadas com add_section): ${missing.join(", ")}`);
   lines.push("", "PEÇAS DO CATÁLOGO:");
-  for (const p of site.products) lines.push(`[${p.id}] ${p.code} · ${p.title} · ${p.category}${p.featured ? " · destaque" : ""}`);
+  for (const p of site.products)
+    lines.push(`[${p.id}] ${p.code} · ${p.title} · ${p.category}${p.featured ? " · destaque" : ""}${p.specs ? ` · ${p.specs}` : ""}`);
+  if (site.services?.length) {
+    lines.push("", "SOLUÇÕES DA SEÇÃO 1 (add_service / update_service / remove_service):");
+    for (const s of site.services) lines.push(`[${s.id}] ${s.title} (${s.category})${s.lead ? ` — ${s.lead}` : ""}`);
+  }
+  if (site.sectors?.length) {
+    lines.push("", "SEGMENTOS ATENDIDOS (add_sector / update_sector / remove_sector):");
+    for (const s of site.sectors) lines.push(`[${s.id}] ${s.code ? `${s.code} · ` : ""}${s.name}`);
+  }
+  if (site.pillars?.length) {
+    lines.push("", "PILARES DA EMPRESA (add_pillar / update_pillar / remove_pillar):");
+    for (const p of site.pillars) lines.push(`[${p.id}] ${p.title}${p.desc ? `: ${p.desc}` : ""}`);
+  }
+  if (site.process?.length) {
+    lines.push("", "ETAPAS DO PROCESSO (update_process_step com step 1 a 3):");
+    site.process.forEach((p, i) => lines.push(`etapa ${i + 1}. ${p.label} — ${p.title}${p.copy ? `: ${p.copy}` : ""}`));
+  }
   lines.push("", "EMPRESA E CONTATO:");
   for (const [k, v] of Object.entries(site.company)) lines.push(`${k} (${COMPANY_FIELDS[k][0]}): ${v}`);
   if (site.socials?.length) lines.push(`Redes: ${site.socials.map((x) => `${x.network} ${x.url}`).join("; ")}`);
@@ -282,10 +337,16 @@ export function siteState(site, texts) {
   const n = site.notice;
   lines.push("", `AVISO AO ABRIR O SITE: ${n ? `${n.enabled ? "ligado" : "desligado"} — “${n.title}” de ${n.start} a ${n.end}: ${n.text}` : "nenhum configurado"}`);
   lines.push(`Data de hoje: ${new Date().toISOString().slice(0, 10)}. Ícones disponíveis: ${ICON_NAMES.join(", ")}.`);
+  lines.push(`Fotos recortadas do acervo interno (asset_image quando não houver foto anexada): ${ASSET_IMAGES.join(", ")}.`);
   lines.push("", "FOTOS QUE PODEM SER TROCADAS (alvo — onde fica):");
   for (const i of site.images) lines.push(`${i.target} — ${i.label}`);
   lines.push("", "FOTOS ANEXADAS NESTA CONVERSA:");
   lines.push(site.attachments.length ? site.attachments.map((a) => `${a.id} (${a.name})`).join("; ") : "nenhuma");
+  const styledEntries = Object.entries(site.styles ?? {});
+  if (styledEntries.length) {
+    lines.push("", "ESTILOS, LARGURAS E POSIÇÕES ATUAIS DOS TEXTOS:");
+    for (const [k, st] of styledEntries) lines.push(`[${k}] ${JSON.stringify(st)}`);
+  }
   lines.push("", "TEXTOS (chave — onde fica: texto atual):");
   for (const t of texts) lines.push(`[${t.key}] ${t.label}: ${t.text}`);
   return lines.join("\n");
@@ -293,22 +354,24 @@ export function siteState(site, texts) {
 
 export function chatSystemPrompt(facts, state) {
   return [
-    "Você é o assistente de edição do site institucional da Usibar Usinagens Especiais, fabricante de cilindros hidráulicos, blocos hidráulicos (manifolds) e peças usinadas em CNC sob medida.",
-    "Você conversa com o administrador do site e o ajuda a editar tudo o que é possível: textos, cor e tamanho dos textos, seções (inserir, mover, ocultar, remover, renomear), fotos, peças do catálogo, dados de contato e redes sociais.",
-    "Como agir:",
-    "- Para mudar o site, chame as funções. Cada chamada vira uma ação que o administrador confirma com um clique; nada muda sem ele, e tudo pode ser desfeito. Junto das chamadas, escreva uma frase curta dizendo o que preparou.",
-    "- Use só ids de seção, ids de peça, chaves de texto, alvos de foto e fotos anexadas que aparecem no ESTADO DO SITE. Nunca invente ids nem chaves.",
-    "- Se o pedido for ambíguo (qual seção, qual peça, qual foto, qual texto), pergunte antes, em uma frase, sem chamar funções.",
-    "- Foto anexada sem instrução: descreva em uma frase o que vê e ofereça opções (cadastrar como peça nova, trocar a foto do topo ou de uma peça, usar numa seção ou galeria).",
-    "- Ao cadastrar uma peça pela foto: nome e descrição curtos a partir do que se vê; não invente medidas, pressões, materiais, normas ou aplicações. Sem código informado, proponha o próximo no padrão dos códigos existentes. Se o fundo da foto for poluído, use remove_background.",
-    "- Para revisar todos os textos de uma vez, chame review_texts. Para mostrar algo, chame show_on_site.",
-    "- Para criar algo novo, insira uma seção livre (add_section com type blocks) combinando blocos; mantenha o tom sóbrio e industrial do site. Textos e botões das seções fixas podem ser removidos ou recolocados com set_element_visibility.",
+    "Você é o assistente autônomo de edição do site institucional da Usibar Usinagens Especiais, fabricante de cilindros hidráulicos, blocos hidráulicos (manifolds) e peças usinadas em CNC sob medida.",
+    "Você conversa com o administrador do site e tem ampla autonomia para realizar edições completas e múltiplas tarefas em uma única resposta: textos, cor, tamanho, largura esticada na tela, alinhamento e posição responsiva nos cantos, seções (inserir, publicar, mover, ocultar, remover, renomear), blocos de seções livres, cartões de Soluções (seção 1), Segmentos atendidos, Pilares da empresa, Etapas do processo, peças do catálogo (com ou sem foto anexada), aviso de abertura, dados de contato e redes sociais.",
+    "Autonomia e múltiplas tarefas:",
+    "- Seja proativo e resolutivo: quando o administrador pedir várias mudanças de uma vez (por exemplo, cadastrar 3 peças novas, criar e publicar uma seção completa com blocos, atualizar textos e contatos, ou ajustar textos + largura + posição nos cantos), decomponha o pedido e emita TODAS as chamadas de função necessárias no mesmo turno, na ordem lógica, sem pedir confirmações intermediárias desnecessárias.",
+    "- Tudo o que você executa pode ser desfeito com um clique em “Desfazer”, então prefira agir com autonomia quando a intenção estiver clara. Junto das chamadas, resuma de forma objetiva o que realizou.",
+    "- Use só ids de seção, ids de peça/solução/segmento/pilar, chaves de texto, alvos de foto e fotos anexadas que aparecem no ESTADO DO SITE. Nunca invente ids nem chaves.",
+    "- Pergunte antes (em uma frase curta, sem chamar funções) apenas quando houver ambiguidade real que impeça saber qual item alterar.",
+    "- Cadastro de peças (add_product): funciona COM foto anexada (image: foto-N) ou SEM foto anexada (usando asset_image do acervo interno ou deixando o sistema atribuir a foto padrão recortada da categoria). Sem código informado, gere códigos sequenciais no padrão existente (ex.: USB-CH-05 para cilindros, USB-BH-05 para blocos) sem repetir códigos já usados. Quando houver foto anexada sobre fundo branco/mesa/oficina, ative remove_background: true.",
+    "- Layout, largura e posição responsiva dos textos (style_text): além de color (#rrggbb) e size (0.6 a 2.4), você pode esticar blocos de texto na tela com width (10 a 100, porcentagem da largura da seção, evitando quebras de linha precoces), alinhar com align (left, center, right) e posicionar responsivamente em qualquer ponto ou canto da seção com x (0 = bem no canto esquerdo, 50 = centro, 100 = bem no canto direito) e y (0 = topo, 50 = meio, 100 = base), ou voltar ao fluxo original com reset_position: true.",
+    "- Foto anexada sem instrução: descreva em uma frase o que vê e ofereça opções práticas (cadastrar como peça recortando o fundo, trocar foto do topo/solução/peça, ou criar galeria).",
+    "- Ao criar uma seção nova pedida pelo administrador, use add_section (prefira type blocks para seções ricas sob medida e defina visible: true quando o administrador pedir para criar/colocar no site). Textos e botões das seções fixas podem ser ocultados/recolocados com set_element_visibility.",
+    "- Soluções da seção 1, Segmentos, Pilares e Processo: use add_service/update_service/remove_service, add_sector/update_sector/remove_sector, add_pillar/update_pillar/remove_pillar e update_process_step para gerenciar esses itens diretamente.",
     "- Avisos como férias coletivas ou feriados: use set_notice com período, data de retorno e contato (WhatsApp/e-mail) no texto; datas no formato AAAA-MM-DD.",
-    "- Você não altera senhas nem administradores, não muda o desenho do site além de cor e tamanho dos textos e não publica nada fora do site. Diga isso com gentileza quando pedirem.",
-    "- Se o administrador perguntar o que você sabe fazer, dê exemplos práticos de pedidos.",
+    "- Para revisar todos os textos da página, chame review_texts. Para rolar até um item e destacá-lo, chame show_on_site.",
+    "- Você não altera senhas nem contas de administradores e não publica nada fora do site. Explique com gentileza se pedirem.",
     "Textos:",
     "- Português do Brasil, tom profissional, técnico e claro, para compradores industriais.",
-    "- Use apenas os fatos abaixo e o próprio site. Não invente números, prazos, certificações, normas, clientes, garantias ou capacidades.",
+    "- Use apenas os fatos abaixo, o que o administrador informou e o próprio site. Não invente números, prazos, certificações, normas, clientes, garantias ou capacidades.",
     "- Preserve nomes próprios, códigos de peça e unidades. Rótulos e títulos curtos continuam curtos.",
     "- Suas respostas: curtas e diretas, texto puro sem markdown; listas simples com “- ” quando ajudar.",
     "Fatos da empresa:",
@@ -319,7 +382,7 @@ export function chatSystemPrompt(facts, state) {
   ].join("\n");
 }
 
-export function geminiChatRequest({ system, messages, maxTokens = 8192 }) {
+export function geminiChatRequest({ system, messages, maxTokens = 16384 }) {
   const contents = [];
   for (const m of messages) {
     const role = m.role === "assistant" ? "model" : "user";

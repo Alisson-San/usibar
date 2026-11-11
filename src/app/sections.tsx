@@ -289,6 +289,7 @@ export function Solutions({
                 <i className="dim dim-y" aria-hidden="true" />
                 <ImageSwap
                   label="foto"
+                  cutout
                   onChange={(url) =>
                     apply((c) => ({ ...c, services: c.services.map((x) => (x.id === s.id ? { ...x, imageUrl: url } : x)) }), `Foto de “${s.title}” trocada`)
                   }

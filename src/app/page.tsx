@@ -684,7 +684,26 @@ export default function UsibarHome() {
     })),
     removables: [...removables.current].map(([key, label]) => ({ key, label: label.slice(0, 120), hidden: content.hidden.includes(key) })),
     notice: content.notice,
-    products: products.map(({ id, code, title, category, featured }) => ({ id, code: code.slice(0, 40), title: title.slice(0, 200), category, featured })),
+    products: products.map(({ id, code, title, category, featured, specs, description }) => ({
+      id,
+      code: code.slice(0, 40),
+      title: title.slice(0, 200),
+      category,
+      featured,
+      specs: (specs ?? "").slice(0, 300),
+      description: (description ?? "").slice(0, 1200),
+    })),
+    services: services.map((s) => ({
+      id: s.id,
+      title: s.title.slice(0, 200),
+      lead: (s.lead ?? "").slice(0, 300),
+      copy: (s.copy ?? "").slice(0, 1200),
+      category: s.category,
+    })),
+    sectors: sectors.map((s) => ({ id: s.id, name: s.name.slice(0, 120), code: (s.code ?? "").slice(0, 40) })),
+    pillars: pillars.map((p) => ({ id: p.id, title: p.title.slice(0, 120), desc: (p.desc ?? "").slice(0, 400) })),
+    process: steps.map((s) => ({ label: s.label.slice(0, 80), title: s.title.slice(0, 200), copy: (s.copy ?? "").slice(0, 600) })),
+    styles: content.styles,
     company: Object.fromEntries(Object.keys(COMPANY_FIELDS).flatMap((k) => (typeof company[k] === "string" && company[k] ? [[k, company[k]]] : []))),
     socials: socialsOf(company).map(({ network, url }) => ({ network, url })),
     images: [
@@ -695,20 +714,21 @@ export default function UsibarHome() {
       ...products.map((p) => ({ target: `product:${p.id}`, label: `a foto da peça ${p.code.slice(0, 40)}` })),
     ],
   };
-  const runChatAction = async ({ name, args }: ChatAction, files: Map<string, File>) => {
-    if (name === "set_text") {
-      const f = fields.current.get(String(args.key));
-      if (!f) throw Error("Esse texto não está na página agora.");
-      f.commit(String(args.text));
-      return `Texto “${f.label}” alterado`;
-    }
-    // Photos go up only when an action that uses them is applied; each version of a file is sent once.
+  const runChatBatch = async (actions: ChatAction[], files: Map<string, File>) => {
+    if (!actions.length) return [];
+    // Collect and upload any needed photos across the whole batch; each version of a file is sent once.
     const wanted: [string, boolean][] = [];
-    if (typeof args.image === "string") wanted.push([args.image, args.remove_background === true]);
-    if (Array.isArray(args.photos)) for (const ph of args.photos as { image: string }[]) wanted.push([ph.image, false]);
-    if (Array.isArray(args.blocks)) for (const b of args.blocks as { image?: string }[]) if (b.image) wanted.push([b.image, false]);
+    for (const { name, args } of actions) {
+      if (typeof args.image === "string") {
+        const defaultCutout = name === "add_service" || name === "update_service";
+        wanted.push([args.image, args.remove_background === undefined ? defaultCutout : args.remove_background === true]);
+      }
+      if (Array.isArray(args.photos)) for (const ph of args.photos as { image: string }[]) wanted.push([ph.image, false]);
+      if (Array.isArray(args.blocks)) for (const b of args.blocks as { image?: string }[]) if (b.image) wanted.push([b.image, false]);
+    }
     const urls = new Map<string, string>();
     for (const [id, removeBg] of wanted) {
+      if (urls.has(`${id}:${removeBg}`)) continue;
       const file = files.get(id);
       if (!file) throw Error(`A foto ${id} não está mais disponível.`);
       const done = uploaded.current.get(file) ?? {};
@@ -720,21 +740,36 @@ export default function UsibarHome() {
       }
       urls.set(`${id}:${removeBg}`, uploaded.current.get(file)![kind]);
     }
-    let result: { content: Content; label: string };
+    let nextContent = contentRef.current!;
+    const labels: string[] = [];
     try {
-      result = applyAction(contentRef.current!, { name, args }, {
-        url: (id: string, removeBg?: boolean) => urls.get(`${id}:${!!removeBg}`),
-        templateData: (type: string) => TEMPLATE_INFO[type as keyof typeof TEMPLATE_INFO].data(),
-        newId: () => crypto.randomUUID().replace(/-/g, "").slice(0, 10),
-        sectionName: (b: Block) => blockName(b),
-      });
+      for (const action of actions) {
+        const r = applyAction(nextContent, action, {
+          url: (id: string, removeBg?: boolean) => urls.get(`${id}:${!!removeBg}`),
+          templateData: (type: string) => TEMPLATE_INFO[type as keyof typeof TEMPLATE_INFO].data(),
+          newId: () => crypto.randomUUID().replace(/-/g, "").slice(0, 10),
+          sectionName: (b: Block) => blockName(b),
+        });
+        nextContent = r.content;
+        if (action.name === "set_text") {
+          const f = fields.current.get(String(action.args.key));
+          if (f) {
+            f.el.textContent = String(action.args.text);
+            labels.push(`Texto “${f.label}” alterado`);
+            continue;
+          }
+        }
+        labels.push(r.label);
+      }
     } catch (e) {
-      if (wanted.length) setSave({ kind: "idle" }); // the upload left the bar on "saving"
+      if (wanted.length) setSave({ kind: "idle" });
       throw e;
     }
-    if (!(await commit(result.label, () => result.content))) throw Error("O servidor recusou a alteração; ela foi desfeita.");
-    return result.label;
+    const summary = labels.length === 1 ? labels[0] : `${labels.length} alterações aplicadas pelo assistente`;
+    if (!(await commit(summary, () => nextContent))) throw Error("O servidor recusou a alteração; ela foi desfeita.");
+    return labels;
   };
+  const runChatAction = async (action: ChatAction, files: Map<string, File>) => (await runChatBatch([action], files))[0];
   const showOnSite = ({ section: id, key }: { section?: string; key?: string }) => {
     const el = key ? fields.current.get(key)?.el : undefined;
     if (el) {
@@ -1188,7 +1223,7 @@ export default function UsibarHome() {
                 </span>
               </Removable>
               <HeroArt src={heroImage} />
-              <ImageSwap label="foto do topo" onChange={(url) => commit("Foto do topo trocada", (c) => ({ ...c, company: { ...c.company, heroImageUrl: url } }))} />
+              <ImageSwap label="foto do topo" cutout onChange={(url) => commit("Foto do topo trocada", (c) => ({ ...c, company: { ...c.company, heroImageUrl: url } }))} />
             </div>
           </div>
           <ProofBar company={company} />
@@ -1331,7 +1366,19 @@ export default function UsibarHome() {
             }}
           />
         )}
-        {editing && <ChatPanel open={chatOpen} ai={aiStatus} site={chatSite} run={runChatAction} show={showOnSite} onClose={() => setChatOpen(false)} />}
+        {editing && (
+          <ChatPanel
+            open={chatOpen}
+            ai={aiStatus}
+            site={chatSite}
+            run={runChatAction}
+            runBatch={runChatBatch}
+            canUndo={undo.length > 0}
+            onUndo={undoLast}
+            show={showOnSite}
+            onClose={() => setChatOpen(false)}
+          />
+        )}
         {editing && <TextToolbar ai={aiStatus} />}
         {noticeShown && !editing && content.notice && <NoticeModal notice={content.notice} whatsapp={company.whatsapp} lenis={lenisRef.current} onClose={() => setNoticeShown(false)} />}
         {noticeEdit && (

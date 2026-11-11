@@ -306,7 +306,8 @@ button:disabled {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
+  filter: drop-shadow(0 10px 18px #292c271c);
   transition: transform 0.8s cubic-bezier(0.2, 0.75, 0.2, 1);
 }
 .product-card:hover img {
@@ -510,7 +511,8 @@ button:disabled {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
+  filter: drop-shadow(0 14px 26px #292c2722);
   transition: transform 0.5s;
 }
 .part-inspect-image.zoomed img {
@@ -1736,10 +1738,11 @@ body {
   width: 100%;
   max-height: 72svh;
   overflow: visible;
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
 }
 .hero-part image {
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
+  filter: drop-shadow(0 18px 30px #292c2726);
 }
 .proof-bar {
   list-style: none;
@@ -1851,7 +1854,8 @@ body {
   width: 82%;
   height: 82%;
   object-fit: contain;
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
+  filter: drop-shadow(0 12px 22px #292c2724);
   transition: transform 0.9s var(--ease-out);
 }
 .solution-card:hover .solution-figure img {
@@ -2647,7 +2651,7 @@ body {
   mix-blend-mode: normal;
 }
 .editing .hero-part image {
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
 }
 /* Icons for networks and contacts */
 .glyph {
@@ -2912,7 +2916,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
 }
 .wo-icon .sector-icon {
   width: 34px;
@@ -4639,10 +4643,18 @@ div.removed-slot {
   background: var(--paper);
 }
 .ub-flow {
-  max-width: 980px;
+  width: 100%;
+  max-width: none;
   display: flex;
   flex-direction: column;
   gap: 22px;
+}
+.ub-figure,
+.ub-features,
+.ub-callout,
+.ub-quote,
+.ub-divider {
+  max-width: 980px;
 }
 .ub {
   position: relative;
@@ -5038,4 +5050,209 @@ div.removed-slot {
   .notice-strip {
     margin-right: calc(4% + 172px);
   }
+}
+
+/* ======================================================================
+   Responsive stretchable & repositionable text blocks + autonomous AI UI
+   ====================================================================== */
+.usibar-site section,
+.site-footer {
+  position: relative;
+}
+.editing .hero-title > span,
+.hero-title > span:has([data-custom-box]) {
+  overflow: visible;
+}
+.hero-title .line-inner:has([data-stretched]) {
+  white-space: normal;
+}
+.editing .sector-tile,
+.sector-tile:has([data-custom-box]) {
+  overflow: visible;
+}
+:is(p, h1, h2, h3, h4, li, blockquote, .ub-callout, .ub-quote, .ub-features, .proof-bar li > span):has([data-stretched]) {
+  max-width: none;
+}
+
+.editable-box {
+  position: relative;
+  display: inline-block;
+  vertical-align: baseline;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.editable-box.is-boxed {
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.editable-box.is-boxed > .editable {
+  display: block;
+  width: 100%;
+}
+.editable-box.is-active > .editable,
+.editable-box.is-dragging > .editable {
+  outline: 2px solid var(--orange);
+  background: color-mix(in srgb, var(--orange) 10%, transparent);
+}
+.editable-box.is-dragging {
+  z-index: 45 !important;
+  user-select: none;
+}
+
+.ed-handle {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 14px;
+  min-height: 18px;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  cursor: ew-resize;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.16s;
+}
+.ed-handle::after {
+  content: "";
+  width: 4px;
+  height: min(24px, 78%);
+  min-height: 12px;
+  border-radius: 4px;
+  background: var(--orange);
+  box-shadow: 0 0 0 1.5px var(--paper), 0 2px 8px #292c2740;
+  transition: transform 0.16s, background-color 0.16s;
+}
+.ed-handle:hover::after {
+  transform: scaleX(1.25);
+  background: var(--orange-2);
+}
+.ed-w {
+  left: -9px;
+}
+.ed-e {
+  right: -9px;
+}
+.editable-box:hover > .ed-handle,
+.editable-box.is-active > .ed-handle,
+.editable-box.is-dragging > .ed-handle {
+  opacity: 1;
+}
+
+.ed-move {
+  position: absolute;
+  top: -13px;
+  left: -10px;
+  z-index: 9;
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1.5px solid var(--orange);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  scale: 0.85;
+  box-shadow: 0 4px 12px #292c2740;
+  transition:
+    opacity 0.18s,
+    scale 0.18s,
+    background-color 0.18s;
+}
+.editable-box:hover > .ed-move,
+.editable-box.is-active > .ed-move,
+.editable-box.is-dragging > .ed-move {
+  opacity: 1;
+  scale: 1;
+}
+.ed-move:hover,
+.editable-box.is-dragging > .ed-move {
+  background: var(--orange);
+  color: #fff;
+}
+.editable-box.is-dragging > .ed-move {
+  cursor: grabbing;
+}
+
+.ed-hud {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 50;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: var(--ink);
+  color: var(--paper);
+  font: 600 10.5px/1.2 var(--font-mono), monospace;
+  font-style: normal;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 8px 22px #292c2755;
+}
+
+.text-toolbar .tt-layout.on {
+  background: #e0693a38;
+  color: #ffc5a8;
+  box-shadow: inset 0 0 0 1px var(--orange-2);
+}
+.tt-layout-panel {
+  gap: 10px;
+}
+.tt-layout-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.tt-layout-row > .tiny-mono {
+  min-width: 132px;
+  color: #efa077;
+}
+.tt-layout-row input[type="range"] {
+  flex: 1 1 160px;
+  accent-color: var(--orange);
+  cursor: pointer;
+}
+.tt-layout-row small {
+  flex-basis: 100%;
+  color: #f7f2e999;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.chat-panel .chat-auto {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 100px;
+  border: 1px solid #f7f2e933;
+  background: #f7f2e912;
+  font: 600 11px var(--font-mono), monospace;
+  letter-spacing: 0.04em;
+}
+.chat-panel .chat-auto.on {
+  border-color: var(--orange);
+  background: #fa480429;
+  color: #ffb899;
+}
+.chat-undo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.chat-undo-row button.link {
+  min-height: 26px;
+  padding: 0 4px;
+  font-size: 12px;
 }

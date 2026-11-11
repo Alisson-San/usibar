@@ -168,3 +168,25 @@ test("a conversation carries up to eight photos", () => {
   assert.equal(validateAiRequest(withPhotos(8)).ok, true);
   assert.equal(validateAiRequest(withPhotos(9)).ok, false);
 });
+
+test("chat accepts enriched structured sections and custom text box coordinates", () => {
+  const richSite = {
+    ...chatSite,
+    services: [{ id: "cilindros", title: "Cilindros hidráulicos", lead: "Sob medida", copy: "Simples e dupla ação.", category: "cilindros" }],
+    sectors: [{ id: "agricola", name: "Agrícola", code: "SEC-01" }],
+    pillars: [{ id: "p1", title: "Sob medida", desc: "Conforme desenho." }],
+    process: [
+      { label: "O desenho", title: "Projeto.", copy: "Etapa 1." },
+      { label: "A usinagem", title: "CNC.", copy: "Etapa 2." },
+      { label: "O movimento", title: "Teste.", copy: "Etapa 3." },
+    ],
+    styles: { "hero.title.1": { width: 90, x: 0, y: 100 } },
+  };
+  assert.equal(validateAiRequest(chatBody([{ role: "user", text: "Cadastre 2 cilindros" }], { site: richSite })).ok, true);
+  const state = siteState(richSite, chatTexts);
+  assert.match(state, /SOLUÇÕES DA SEÇÃO 1/);
+  assert.match(state, /SEGMENTOS ATENDIDOS/);
+  assert.match(state, /PILARES DA EMPRESA/);
+  assert.match(state, /ETAPAS DO PROCESSO/);
+  assert.match(state, /"width":90/);
+});

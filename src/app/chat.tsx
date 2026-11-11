@@ -9,13 +9,18 @@ export type ChatSite = {
   sections: { id: string; type: string; name: string; hidden: boolean; blocks?: { id: string; kind: string; text: string }[] }[];
   removables: { key: string; label: string; hidden: boolean }[];
   notice?: object;
-  products: { id: string; code: string; title: string; category: string; featured: boolean }[];
+  products: { id: string; code: string; title: string; category: string; featured: boolean; specs?: string; description?: string }[];
+  services?: { id: string; title: string; lead: string; copy: string; category: string }[];
+  sectors?: { id: string; name: string; code: string }[];
+  pillars?: { id: string; title: string; desc: string }[];
+  process?: { label: string; title: string; copy: string }[];
+  styles?: Record<string, unknown>;
   company: Record<string, string>;
   socials: { network: string; url: string }[];
   images: { target: string; label: string }[];
 };
 type Photo = { id: string; name: string; file: File; preview: string; inline: { mimeType: string; data: string } };
-type Item = { action: ChatAction; state?: "running" | "applied" | "ignored" | "error"; note?: string; issue?: string };
+type Item = { action: ChatAction; state?: "running" | "applied" | "ignored" | "error"; note?: string; issue?: string; before?: string };
 type Msg = { role: "user" | "assistant"; text: string; photos?: string[]; items?: Item[]; failed?: boolean };
 
 const MAX_PHOTOS = 8;
@@ -42,6 +47,9 @@ export function ChatPanel({
   ai,
   site,
   run,
+  runBatch,
+  canUndo = false,
+  onUndo,
   show: reveal,
   onClose,
 }: {
@@ -49,6 +57,9 @@ export function ChatPanel({
   ai: AiStatus;
   site: ChatSite;
   run: (action: ChatAction, files: Map<string, File>) => Promise<string>;
+  runBatch: (actions: ChatAction[], files: Map<string, File>) => Promise<string[]>;
+  canUndo?: boolean;
+  onUndo?: () => void;
   show: (target: { section?: string; key?: string }) => void;
   onClose: () => void;
 }) {
@@ -61,10 +72,17 @@ export function ChatPanel({
   const [ideas, setIdeas] = useState(false);
   const [drag, setDrag] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [autoMode, setAutoMode] = useState(true);
   const list = useRef<HTMLOListElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const afterPick = useRef("");
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("usibar-ai-auto") === "0") setAutoMode(false);
+    } catch {}
+  }, []);
 
   // The page's texts as the server accepts them: up to 200, about 40 000 characters in all.
   const texts = () => {
@@ -151,12 +169,47 @@ export function ChatPanel({
         texts: texts(),
       });
       const auto = res.actions.filter((a) => AUTO_ACTIONS.has(a.name));
-      const items = res.actions.filter((a) => !AUTO_ACTIONS.has(a.name)).map((action) => ({ action }));
+      const rawItems: Item[] = res.actions
+        .filter((a) => !AUTO_ACTIONS.has(a.name))
+        .map((action) => {
+          const f = typeof action.args.key === "string" ? fields.current.get(action.args.key) : undefined;
+          return { action, before: f ? f.el.textContent || f.get() : undefined, state: autoMode ? "running" : undefined };
+        });
       const reply =
         res.reply ||
-        (items.length ? "Preparei estas alterações. Confira e aplique:" : auto.length ? "" : "Não entendi bem o que mudar. Pode explicar de outro jeito?");
+        (rawItems.length
+          ? autoMode
+            ? `Executando ${rawItems.length === 1 ? "a alteração solicitada" : `${rawItems.length} tarefas em sequência`}…`
+            : "Preparei estas alterações. Confira e aplique:"
+          : auto.length
+            ? ""
+            : "Não entendi bem o que mudar. Pode explicar de outro jeito?");
       const dropped = res.dropped ? `\n\n(${res.dropped === 1 ? "Uma ação foi descartada" : `${res.dropped} ações foram descartadas`} por não corresponder ao site atual.)` : "";
-      if (reply || items.length) setMessages((m) => [...m, { role: "assistant", text: reply + dropped, items }]);
+      let msgIndex = -1;
+      if (reply || rawItems.length) {
+        msgIndex = history.length;
+        setMessages([...history, { role: "assistant", text: reply + dropped, items: rawItems }]);
+      }
+      if (autoMode && rawItems.length && msgIndex >= 0) {
+        setBusy(rawItems.length > 1 ? `Aplicando ${rawItems.length} tarefas…` : "Aplicando alteração…");
+        const files = new Map(photos.map((p) => [p.id, p.file]));
+        try {
+          const notes = await runBatch(
+            rawItems.map((it) => it.action),
+            files,
+          );
+          setMessages((all) =>
+            all.map((m, i) =>
+              i === msgIndex ? { ...m, items: m.items?.map((it, j) => ({ ...it, state: "applied", note: notes[j] || "Aplicada" })) } : m,
+            ),
+          );
+        } catch (e) {
+          const err = (e as Error).message;
+          setMessages((all) =>
+            all.map((m, i) => (i === msgIndex ? { ...m, items: m.items?.map((it) => ({ ...it, state: "error", note: err })) } : m)),
+          );
+        }
+      }
       for (const a of auto) {
         if (a.name === "show_on_site") show(a.args as { section?: string; key?: string });
         if (a.name === "review_texts") await review();
@@ -172,7 +225,14 @@ export function ChatPanel({
     setBusy("Revisando os textos… (pode levar até um minuto)");
     try {
       const res = await askAi<{ summary: string; suggestions: { key: string; issue: string; suggestion: string }[] }>({ action: "review", fields: texts() });
-      const items = res.suggestions.map((s) => ({ action: { name: "set_text", args: { key: s.key, text: s.suggestion } }, issue: s.issue }));
+      const items: Item[] = res.suggestions.map((s) => {
+        const f = fields.current.get(s.key);
+        return {
+          action: { name: "set_text", args: { key: s.key, text: s.suggestion } },
+          issue: s.issue,
+          before: f ? f.el.textContent || f.get() : undefined,
+        };
+      });
       setMessages((m) => [
         ...m,
         { role: "assistant", text: [res.summary, items.length ? "Sugestões de mudança:" : "Nenhuma mudança necessária: os textos estão consistentes."].filter(Boolean).join("\n\n"), items },
@@ -199,25 +259,48 @@ export function ChatPanel({
   }
   async function applyAll(mi: number) {
     const items = messages[mi].items ?? [];
-    for (let i = 0; i < items.length; i++) if (!items[i].state || items[i].state === "error") await apply(mi, i);
+    const pendingIdx = items.map((it, i) => (!it.state || it.state === "error" ? i : -1)).filter((i) => i >= 0);
+    if (!pendingIdx.length) return;
+    if (pendingIdx.length === 1) {
+      await apply(mi, pendingIdx[0]);
+      return;
+    }
+    const idxSet = new Set(pendingIdx);
+    setMessages((all) =>
+      all.map((m, i) => (i === mi ? { ...m, items: m.items?.map((it, j) => (idxSet.has(j) ? { ...it, state: "running", note: "" } : it)) } : m)),
+    );
+    const files = new Map(photos.map((p) => [p.id, p.file]));
+    try {
+      const notes = await runBatch(
+        pendingIdx.map((i) => items[i].action),
+        files,
+      );
+      const noteByIdx = new Map(pendingIdx.map((idx, k) => [idx, notes[k] || "Aplicada"]));
+      setMessages((all) =>
+        all.map((m, i) =>
+          i === mi ? { ...m, items: m.items?.map((it, j) => (noteByIdx.has(j) ? { ...it, state: "applied", note: noteByIdx.get(j) } : it)) } : m,
+        ),
+      );
+    } catch {
+      for (const i of pendingIdx) await apply(mi, i);
+    }
   }
 
   const first = (type: string) => site.sections.find((s) => s.type === type)?.name;
   const ideasList: [string, string?][] = [
     ["O que você consegue fazer no site?"],
+    ["Cadastrar 2 cilindros e 1 bloco hidráulico novos em lote"],
+    ["Esticar o subtítulo do topo para ocupar mais largura na tela"],
+    ["Criar e publicar uma seção completa sobre a linha agrícola"],
+    ["Cadastrar uma peça nova com foto recortando o fundo", "Cadastre esta peça no catálogo recortando o fundo."],
+    ["Trocar a foto do topo", "Use esta foto como a foto grande do topo do site, recortando o fundo."],
     ["Revisar todos os textos da página"],
-    ["Cadastrar uma peça nova com foto", "Cadastre esta peça no catálogo."],
-    ["Trocar a foto do topo", "Use esta foto como a foto grande do topo do site."],
-    ["Inserir uma seção de depoimento de cliente"],
     first("sectors") && first("solutions") ? [`Mover “${first("sectors")}” para logo depois de “${first("solutions")}”`] : ["Mudar a ordem das seções"],
-    first("process") ? [`Ocultar a seção “${first("process")}”`] : ["Ocultar uma seção"],
+    ["Adicionar um novo segmento atendido e atualizar o WhatsApp"],
     ["Deixar o título do topo mais comercial"],
     ["Mudar a cor do título do catálogo para laranja"],
-    ["Atualizar o telefone e o WhatsApp"],
     ["Adicionar o LinkedIn da empresa"],
-    ["Criar uma seção nova sobre a linha agrícola, com destaques e botão"],
     ["Avisar sobre as férias coletivas de fim de ano"],
-    ["Remover o botão secundário do topo"],
   ];
   const photoIdeas: [string, string?][] = [
     ["Cadastre como peça nova no catálogo, recortando o fundo"],
@@ -262,6 +345,27 @@ export function ChatPanel({
     >
       <header className="chat-top">
         <span>✦ Assistente do site</span>
+        {ai?.configured && (
+          <button
+            type="button"
+            className={"chat-auto" + (autoMode ? " on" : "")}
+            aria-pressed={autoMode}
+            title={
+              autoMode
+                ? "Modo autônomo ativo: aplica alterações e múltiplas tarefas na hora (clique para aprovar manualmente)"
+                : "Modo manual: prepara as ações para você revisar antes de aplicar (clique para ativar autonomia)"
+            }
+            onClick={() => {
+              const next = !autoMode;
+              setAutoMode(next);
+              try {
+                localStorage.setItem("usibar-ai-auto", next ? "1" : "0");
+              } catch {}
+            }}
+          >
+            ⚡ {autoMode ? "Autônoma" : "Manual"}
+          </button>
+        )}
         {messages.length > 0 && (
           <button
             disabled={!!busy}
@@ -292,9 +396,11 @@ export function ChatPanel({
           <ol className="chat-log" ref={list} aria-live="polite">
             {messages.length === 0 && (
               <li className="chat-empty">
-                <h2>Peça em palavras o que quer mudar.</h2>
+                <h2>Peça uma ou várias tarefas de uma vez.</h2>
                 <p>
-                  O assistente prepara as alterações (textos, cores, seções, fotos, peças e contatos) e você aplica com um clique. Tudo pode ser desfeito em “↶ Desfazer”.
+                  {autoMode
+                    ? "No modo ⚡ Autônoma, a assistente realiza edições, cadastros em lote, cria seções e ajusta larguras/posições automaticamente. Tudo pode ser desfeito em “↶ Desfazer”."
+                    : "No modo Manual, a assistente prepara a lista de alterações para você aplicar com um clique. Tudo pode ser desfeito em “↶ Desfazer”."}
                 </p>
                 <Ideas list={ideasList} onPick={pick} />
               </li>
@@ -316,6 +422,7 @@ export function ChatPanel({
                         const a = it.action.args;
                         const field = typeof a.key === "string" ? fields.current.get(a.key) : undefined;
                         const img = photo(a.image);
+                        const prevText = it.before ?? (field ? field.el.textContent || field.get() : undefined);
                         return (
                           <li key={ii} className={it.state ?? ""}>
                             <span className="chat-act-title">
@@ -325,7 +432,7 @@ export function ChatPanel({
                             {it.issue && <span className="chat-act-issue">{it.issue}</span>}
                             {it.action.name === "set_text" && (
                               <span className="chat-diff" lang="pt-BR">
-                                {field && <del>{field.el.textContent || field.get()}</del>}
+                                {prevText && prevText !== String(a.text) && <del>{prevText}</del>}
                                 <ins>{String(a.text)}</ins>
                               </span>
                             )}
@@ -366,7 +473,16 @@ export function ChatPanel({
                         Aplicar todas ({m.items.filter((it) => !it.state || it.state === "error").length})
                       </button>
                     )}
-                    {m.items.some((it) => it.state === "applied") && <small>Mudou de ideia? “↶ Desfazer” na barra de edição volta uma alteração por vez.</small>}
+                    {m.items.some((it) => it.state === "applied") && (
+                      <span className="chat-undo-row">
+                        <small>Tudo salvo no site.</small>
+                        {canUndo && onUndo && (
+                          <button type="button" className="link" onClick={onUndo}>
+                            ↶ Desfazer última alteração
+                          </button>
+                        )}
+                      </span>
+                    )}
                   </div>
                 )}
               </li>
