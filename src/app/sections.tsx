@@ -288,6 +288,7 @@ export function Solutions({
                 <i className="dim dim-x" aria-hidden="true" />
                 <i className="dim dim-y" aria-hidden="true" />
                 <ImageSwap
+                  src={s.imageUrl}
                   label="foto"
                   cutout
                   onChange={(url) =>

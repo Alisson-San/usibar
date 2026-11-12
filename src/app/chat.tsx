@@ -2,6 +2,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { askAi, type AiStatus } from "./assistant";
 import { CopyContext } from "./copy";
+import { PhotoEditorModal } from "./photo-editor";
 import { AUTO_ACTIONS, describeAction } from "@/lib/site-actions.mjs";
 
 export type ChatAction = { name: string; args: Record<string, unknown> };
@@ -67,6 +68,7 @@ export function ChatPanel({
   const [messages, setMessages] = useState<Msg[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [pending, setPending] = useState<string[]>([]);
+  const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState("");
   const [ideas, setIdeas] = useState(false);
@@ -323,7 +325,9 @@ export function ChatPanel({
         <button onClick={() => setCollapsed(false)}>✦ Voltar ao assistente</button>
       </aside>
     );
+  const editingPhoto = editingPhotoId ? photo(editingPhotoId) : undefined;
   return (
+    <>
     <aside
       className={"chat-panel" + (drag ? " drag" : "")}
       role="dialog"
@@ -506,6 +510,14 @@ export function ChatPanel({
                   <span key={id}>
                     <img src={photo(id)?.preview} alt="" />
                     {id}
+                    <button
+                      type="button"
+                      aria-label={`Editar ${id}`}
+                      title="Recortar, redimensionar ou nivelar foto"
+                      onClick={() => setEditingPhotoId(id)}
+                    >
+                      ✎
+                    </button>
                     <button type="button" aria-label={`Tirar ${id}`} onClick={() => setPending((p) => p.filter((x) => x !== id))}>
                       ×
                     </button>
@@ -562,6 +574,26 @@ export function ChatPanel({
         </>
       )}
     </aside>
+    {editingPhoto && (
+      <PhotoEditorModal
+        source={editingPhoto.file}
+        label={editingPhoto.id}
+        onClose={() => setEditingPhotoId(null)}
+        onApply={async (editedFile) => {
+          const nextPreview = URL.createObjectURL(editedFile);
+          const nextInline = await inline(editedFile);
+          setPhotos((all) =>
+            all.map((p) => {
+              if (p.id !== editingPhoto.id) return p;
+              URL.revokeObjectURL(p.preview);
+              return { ...p, file: editedFile, preview: nextPreview, inline: nextInline };
+            }),
+          );
+          setEditingPhotoId(null);
+        }}
+      />
+    )}
+    </>
   );
 }
 

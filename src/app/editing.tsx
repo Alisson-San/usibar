@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { nextCode } from "@/lib/site-actions.mjs";
 import { adminCall, authFetch, changeMyPassword, type AdminRow } from "@/lib/browser-auth";
+import { PhotoEditorModal } from "./photo-editor";
 
 export type Part = {
   id: string;
@@ -33,7 +34,10 @@ export const blankPart: Part = {
 export { Editable } from "./copy";
 
 
-// Body scroll lock, Escape to close and a focus trap for dialogs.
+const activeModals: symbol[] = [];
+let savedBodyOverflow = "";
+
+// Body scroll lock, Escape to close and a focus trap for dialogs (supports nested dialogs).
 export function useModal(
   open: boolean,
   ref: React.RefObject<HTMLElement | null>,
@@ -44,18 +48,28 @@ export function useModal(
   close.current = onClose;
   useEffect(() => {
     if (!open) return;
+    const token = Symbol("modal");
+    const isFirst = activeModals.length === 0;
+    activeModals.push(token);
     const prev = document.activeElement as HTMLElement | null;
-    const old = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    lenis?.stop();
+    if (isFirst) {
+      savedBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      lenis?.stop();
+    }
     ref.current
-      ?.querySelector<HTMLElement>("input,textarea,button")
+      ?.querySelector<HTMLElement>("input:not(.sr-only):not(:disabled),textarea:not(:disabled),button:not(:disabled)")
       ?.focus();
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close.current();
+      if (activeModals[activeModals.length - 1] !== token) return;
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        close.current();
+        return;
+      }
       if (e.key !== "Tab") return;
       const nodes = ref.current?.querySelectorAll<HTMLElement>(
-        "button:not(:disabled),a[href],input:not(:disabled),textarea,select",
+        "button:not(:disabled),a[href],input:not(:disabled):not(.sr-only),textarea:not(:disabled),select:not(:disabled)",
       );
       if (!nodes?.length) return;
       const first = nodes[0],
@@ -70,8 +84,12 @@ export function useModal(
     };
     document.addEventListener("keydown", key);
     return () => {
-      document.body.style.overflow = old;
-      lenis?.start();
+      const idx = activeModals.lastIndexOf(token);
+      if (idx >= 0) activeModals.splice(idx, 1);
+      if (activeModals.length === 0) {
+        document.body.style.overflow = savedBodyOverflow;
+        lenis?.start();
+      }
       document.removeEventListener("keydown", key);
       prev?.focus();
     };
@@ -102,31 +120,38 @@ export function ProductEditor({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [item, setItem] = useState(part),
     [removeBg, setRemoveBg] = useState(false),
+    [editingSource, setEditingSource] = useState<File | string | null>(null),
+    [sourceFile, setSourceFile] = useState<File | null>(null),
     [busy, setBusy] = useState(false),
     [drag, setDrag] = useState(false),
     [msg, setMsg] = useState("");
   useModal(true, ref, () => !busy && onClose(), lenis);
   const set = <K extends keyof Part>(k: K, v: Part[K]) =>
     setItem((p) => ({ ...p, [k]: v }));
-  async function upload(file?: File) {
+  function pickFile(file?: File) {
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type))
       return setMsg("Envie uma imagem JPG, PNG ou WebP.");
-    if (file.size > 8 * 1024 * 1024) return setMsg("Limite de 8 MB por imagem.");
+    if (file.size > 16 * 1024 * 1024) return setMsg("Limite de 16 MB por imagem.");
+    setMsg("");
+    setSourceFile(file);
+    setEditingSource(file);
+  }
+  async function uploadEdited(editedFile: File) {
     setBusy(true);
     setMsg("Preparando imagem…");
     try {
       const fd = new FormData();
-      fd.append("file", file);
-      fd.append("removeBg", String(removeBg));
+      fd.append("file", editedFile);
+      fd.append("removeBg", "false");
       const res = await authFetch("/api/upload", { method: "POST", body: fd });
       if (!res.ok) throw Error((await readError(res)) || "Falha no envio.");
       set("imageUrl", (await res.json()).url);
       setMsg("");
-    } catch (e) {
-      setMsg((e as Error).message);
+      setEditingSource(null);
     } finally {
       setBusy(false);
     }
@@ -151,71 +176,93 @@ export function ProductEditor({
     else setMsg("Não foi possível salvar. Revise os campos.");
   }
   return (
-    <div className="part-overlay" data-lenis-prevent onClick={() => !busy && onClose()}>
-      <form
-        className="part-dialog part-editor"
-        ref={ref as React.RefObject<HTMLFormElement & HTMLDivElement>}
-        role="dialog"
-        aria-modal="true"
-        aria-label={part.id ? "Editar peça" : "Cadastrar peça"}
-        onSubmit={submit}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="part-dialog-top tiny-mono">
-          <span>{part.id ? "PEÇA / EDIÇÃO" : "NOVA PEÇA / CADASTRO"}</span>
-          <button type="button" onClick={onClose} disabled={busy}>
-            FECHAR ×
-          </button>
-        </div>
-        <label
-          className={"part-inspect-image editor-drop" + (drag ? " dragging" : "")}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            void upload(e.dataTransfer.files?.[0]);
-          }}
+    <>
+      <div className="part-overlay" data-lenis-prevent onClick={() => !busy && onClose()}>
+        <form
+          className="part-dialog part-editor"
+          ref={ref as React.RefObject<HTMLFormElement & HTMLDivElement>}
+          role="dialog"
+          aria-modal="true"
+          aria-label={part.id ? "Editar peça" : "Cadastrar peça"}
+          onSubmit={submit}
+          onClick={(e) => e.stopPropagation()}
         >
-          {item.imageUrl ? (
-            <img src={item.imageUrl} alt="Prévia da peça" />
-          ) : (
-            <strong className="editor-drop-empty">
-              Arraste a foto aqui
-              <br />
-              ou clique para escolher
-            </strong>
-          )}
-          <span className="tiny-mono">
-            {busy && msg.startsWith("Preparando")
-              ? "ENVIANDO…"
-              : item.imageUrl
-                ? "TROCAR FOTO ↗"
-                : "JPG, PNG OU WEBP · ATÉ 8 MB"}
-          </span>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="sr-only"
-            disabled={busy}
-            onChange={(e) => {
-              void upload(e.target.files?.[0]);
-              e.target.value = "";
+          <div className="part-dialog-top tiny-mono">
+            <span>{part.id ? "PEÇA / EDIÇÃO" : "NOVA PEÇA / CADASTRO"}</span>
+            <button type="button" onClick={onClose} disabled={busy}>
+              FECHAR ×
+            </button>
+          </div>
+          <label
+            className={"part-inspect-image editor-drop" + (drag ? " dragging" : "")}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDrag(true);
             }}
-          />
-        </label>
-        <div className="part-dialog-copy editor-fields">
-          <label className="editor-check tiny-mono">
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDrag(false);
+              pickFile(e.dataTransfer.files?.[0]);
+            }}
+          >
+            {item.imageUrl ? (
+              <img src={item.imageUrl} alt="Prévia da peça" />
+            ) : (
+              <strong className="editor-drop-empty">
+                Arraste a foto aqui
+                <br />
+                ou clique para carregar e editar
+              </strong>
+            )}
+            <span className="tiny-mono">
+              {busy && msg.startsWith("Preparando")
+                ? "ENVIANDO…"
+                : item.imageUrl
+                  ? "CARREGAR OUTRA FOTO ↗"
+                  : "JPG, PNG OU WEBP · ABRE NO EDITOR"}
+            </span>
             <input
-              type="checkbox"
-              checked={removeBg}
-              onChange={(e) => setRemoveBg(e.target.checked)}
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              disabled={busy}
+              onChange={(e) => {
+                pickFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
             />
-            Remover fundo branco ao enviar
           </label>
+          {item.imageUrl && (
+            <div className="editor-photo-tools">
+              <button
+                type="button"
+                className="editor-photo-btn primary"
+                disabled={busy}
+                onClick={() => setEditingSource(sourceFile ?? item.imageUrl)}
+              >
+                ✎ Editar / ajustar foto (recorte, ângulo, fundo…)
+              </button>
+              <button
+                type="button"
+                className="editor-photo-btn"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                ⇄ Trocar arquivo
+              </button>
+            </div>
+          )}
+          <div className="part-dialog-copy editor-fields">
+            <label className="editor-check tiny-mono">
+              <input
+                type="checkbox"
+                checked={removeBg}
+                onChange={(e) => setRemoveBg(e.target.checked)}
+              />
+              Remover fundo branco ao abrir nova foto no editor
+            </label>
           <div className="editor-row">
             <fieldset>
               <legend className="tiny-mono">Categoria</legend>
@@ -298,9 +345,20 @@ export function ProductEditor({
               </button>
             )}
           </div>
-        </div>
-      </form>
-    </div>
+          </div>
+        </form>
+      </div>
+      {editingSource && (
+        <PhotoEditorModal
+          source={editingSource}
+          initialRemoveBg={removeBg}
+          label="foto da peça"
+          lenis={lenis}
+          onApply={uploadEdited}
+          onClose={() => setEditingSource(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -524,6 +582,7 @@ export function EditBar({
             <li>Cada seção tem controles para subir, descer, ocultar ou excluir; “+ Inserir seção” adiciona novas, inclusive a “Seção livre”, montada com blocos.</li>
             <li>Textos e botões com “×” podem ser removidos e recolocados depois.</li>
             <li>“Aviso” agenda uma mensagem ao abrir o site, como férias coletivas.</li>
+            <li>Fotos: ao carregar uma nova imagem ou clicar em “Ajustar”, o editor permite redimensionar, recortar, nivelar o ângulo e remover o fundo branco.</li>
             <li>Peças: clique no cartão para editar; “+ Nova peça” para cadastrar.</li>
             <li>Errou? Use “Desfazer” ou Ctrl+Z — vale também para exclusões.</li>
           </ul>

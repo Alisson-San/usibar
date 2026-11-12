@@ -38,6 +38,12 @@ export type Field = {
   styled: boolean;
 };
 
+export type PhotoEditorOpts = {
+  label?: string;
+  cutout?: boolean;
+  onSave: (url: string) => void;
+};
+
 // Every fixed text of the page has a key and a default written in the code. The admin's
 // version (content.copy[key]) wins when present, so new texts never need a data migration.
 type CopyCtx = {
@@ -47,6 +53,7 @@ type CopyCtx = {
   setText: (key: string, value: string, label: string) => void;
   setStyle: (key: string, style: TextStyle | null, label: string) => void;
   upload: (file: File, removeBg?: boolean) => Promise<string | null>;
+  openPhotoEditor: (source: File | string, opts: PhotoEditorOpts) => void;
   fields: React.RefObject<Map<string, Field>>;
   // Texts and buttons of the fixed sections that can be taken out (and put back).
   hidden: string[];
@@ -62,6 +69,7 @@ export const CopyContext = createContext<CopyCtx>({
   setText: () => {},
   setStyle: () => {},
   upload: async () => null,
+  openPhotoEditor: () => {},
   fields: { current: new Map() },
   hidden: [],
   setHidden: () => {},
@@ -510,30 +518,51 @@ export function useTextStyle(key: string) {
   return styleOf(useContext(CopyContext).styles[key]);
 }
 
-// "Trocar foto" control laid over any picture while editing. The parent must be positioned.
-export function ImageSwap({ label, onChange, cutout = false }: { label: string; onChange: (url: string) => void; cutout?: boolean }) {
-  const { editing, upload } = useContext(CopyContext);
-  const [busy, setBusy] = useState(false);
+// "Ajustar / Trocar foto" controls laid over any picture while editing. The parent must be positioned.
+export function ImageSwap({
+  src,
+  label,
+  onChange,
+  cutout = false,
+}: {
+  src?: string;
+  label: string;
+  onChange: (url: string) => void;
+  cutout?: boolean;
+}) {
+  const { editing, openPhotoEditor } = useContext(CopyContext);
   if (!editing) return null;
   return (
-    <label className={"image-swap" + (busy ? " busy" : "")}>
-      {busy ? "Enviando…" : `Trocar ${label}`}
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="sr-only"
-        disabled={busy}
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (!file) return;
-          setBusy(true);
-          const url = await upload(file, cutout);
-          setBusy(false);
-          if (url) onChange(url);
-        }}
-      />
-    </label>
+    <span className="image-swap-group">
+      {src && (
+        <button
+          type="button"
+          className="image-swap image-edit-btn"
+          title={`Redimensionar, nivelar ângulo e ajustar ${label}`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openPhotoEditor(src, { label, cutout, onSave: onChange });
+          }}
+        >
+          Ajustar
+        </button>
+      )}
+      <label className="image-swap">
+        Trocar {label}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            openPhotoEditor(file, { label, cutout, onSave: onChange });
+          }}
+        />
+      </label>
+    </span>
   );
 }
 
