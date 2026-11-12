@@ -1,6 +1,15 @@
 // Remove neutral white studio background (exterior + enclosed holes) while keeping
 // pre-cutout transparent PNGs intact and retaining bright metallic faces/highlights.
-export function removeBackground(data, width, height) {
+export function removeBackground(data, width, height, options = {}) {
+  const tolerance = typeof options?.tolerance === "number" && Number.isFinite(options.tolerance) ? options.tolerance : 0;
+  const edgeLo = Math.max(175, Math.min(253, Math.round(247 - tolerance * 1.6)));
+  const edgeDiff = Math.max(4, Math.min(42, Math.round(10 + tolerance * 0.8)));
+  const holeSeedLo = Math.max(205, Math.min(254, Math.round(252 - tolerance * 0.6)));
+  const holeLo = Math.max(195, Math.min(253, Math.round(248 - tolerance * 0.8)));
+  const holeDiff = Math.max(4, Math.min(30, Math.round(8 + tolerance * 0.5)));
+  const softTop = Math.max(190, Math.min(254, edgeLo + 3));
+  const softSpan = Math.max(5, Math.round(5 + Math.max(0, tolerance) * 0.25));
+
   const pixels = new Uint8Array(data);
   const total = width * height;
   if (!total) return pixels;
@@ -34,7 +43,7 @@ export function removeBackground(data, width, height) {
     const i = n * 4;
     const lo = Math.min(pixels[i], pixels[i + 1], pixels[i + 2]),
       hi = Math.max(pixels[i], pixels[i + 1], pixels[i + 2]);
-    if (lo < 247 || hi - lo > 10) return;
+    if (lo < edgeLo || hi - lo > edgeDiff) return;
     bg[n] = 1;
     queue[tail++] = n;
   };
@@ -65,7 +74,7 @@ export function removeBackground(data, width, height) {
     const si = start * 4;
     const slo = Math.min(pixels[si], pixels[si + 1], pixels[si + 2]),
       shi = Math.max(pixels[si], pixels[si + 1], pixels[si + 2]);
-    if (slo < 252 || shi - slo > 4) continue;
+    if (slo < holeSeedLo || shi - slo > Math.max(4, Math.round(4 + tolerance * 0.35))) continue;
 
     let cHead = 0,
       cTail = 0,
@@ -91,7 +100,7 @@ export function removeBackground(data, width, height) {
         const ni = nb * 4;
         const lo = Math.min(pixels[ni], pixels[ni + 1], pixels[ni + 2]),
           hi = Math.max(pixels[ni], pixels[ni + 1], pixels[ni + 2]);
-        if (lo >= 248 && hi - lo <= 8) {
+        if (lo >= holeLo && hi - lo <= holeDiff) {
           visitedHole[nb] = 1;
           comp[cTail++] = nb;
         } else {
@@ -107,12 +116,12 @@ export function removeBackground(data, width, height) {
     }
   }
 
-  // 4. Make background pixels transparent with smooth transition near 247..250.
+  // 4. Make background pixels transparent with smooth transition near edgeLo..softTop.
   for (let n = 0; n < total; n++) {
     if (!bg[n]) continue;
     const i = n * 4;
     const bright = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
-    const a = bright >= 250 ? 0 : Math.round(Math.max(0, Math.min(1, (250 - bright) / 5)) * 255);
+    const a = bright >= softTop ? 0 : Math.round(Math.max(0, Math.min(1, (softTop - bright) / softSpan)) * 255);
     pixels[i + 3] = Math.min(pixels[i + 3], a);
   }
 

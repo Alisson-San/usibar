@@ -155,7 +155,7 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
             <img src={String(d.imageUrl ?? "")} alt="" loading="lazy" />
             <span className="image-bracket tl" />
             <span className="image-bracket br" />
-            <ImageSwap label="foto" onChange={(url) => update(block.id, (x) => ({ ...x, imageUrl: url }), "Foto da seção")} />
+            <ImageSwap src={String(d.imageUrl ?? "")} label="foto" onChange={(url) => update(block.id, (x) => ({ ...x, imageUrl: url }), "Foto da seção")} />
             {editing && (
               <button className="tpl-flip" onClick={() => update(block.id, (x) => ({ ...x, side: x.side === "left" ? "right" : "left" }), "Lado da foto")}>
                 ⇆ Foto do outro lado
@@ -219,7 +219,7 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
               <li key={i}>
                 <figure>
                   <img src={ph.url} alt={ph.caption} loading="lazy" />
-                  <ImageSwap label="foto" onChange={(url) => setImages((l) => l.map((x, j) => (j === i ? { ...x, url } : x)), "Foto trocada")} />
+                  <ImageSwap src={ph.url} label="foto" onChange={(url) => setImages((l) => l.map((x, j) => (j === i ? { ...x, url } : x)), "Foto trocada")} />
                   {editing && images.length > 1 && (
                     <button className="tpl-remove" aria-label={`Remover foto ${i + 1}`} onClick={() => setImages((l) => l.filter((_, j) => j !== i), "Foto removida")}>
                       ×
@@ -374,7 +374,7 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
             <img src={b.url} alt={b.caption ?? ""} loading="lazy" />
             <span className="image-bracket tl" />
             <span className="image-bracket br" />
-            <ImageSwap label="foto" onChange={(url) => patch(b.id, { url }, "Foto do bloco")} />
+            <ImageSwap src={b.url} label="foto" onChange={(url) => patch(b.id, { url }, "Foto do bloco")} />
             {(b.caption || editing) && <figcaption>{field(b, "caption", "Legenda da foto")}</figcaption>}
           </figure>
         );
@@ -549,7 +549,7 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
 }
 
 function ImageAdd({ onAdd }: { onAdd: (url: string) => void }) {
-  const { upload } = useContext(CopyContext);
+  const { openPhotoEditor } = useContext(CopyContext);
   return (
     <label className="tpl-add-photo-btn">
       + Adicionar foto
@@ -557,12 +557,11 @@ function ImageAdd({ onAdd }: { onAdd: (url: string) => void }) {
         type="file"
         accept="image/jpeg,image/png,image/webp"
         className="sr-only"
-        onChange={async (e) => {
+        onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
           if (!file) return;
-          const url = await upload(file);
-          if (url) onAdd(url);
+          openPhotoEditor(file, { label: "foto da galeria", onSave: onAdd });
         }}
       />
     </label>

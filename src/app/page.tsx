@@ -17,7 +17,8 @@ import {
   type Part,
   type SaveState,
 } from "./editing";
-import { CopyContext, ImageSwap, Removable, T, type Field, type TextStyle } from "./copy";
+import { CopyContext, ImageSwap, Removable, T, type Field, type PhotoEditorOpts, type TextStyle } from "./copy";
+import { PhotoEditorModal } from "./photo-editor";
 import { TextToolbar, type AiStatus } from "./assistant";
 import { ChatPanel, type ChatAction, type ChatSite } from "./chat";
 import { NoticeModal, NoticePanel, NoticeStrip, noticeDue } from "./notice";
@@ -151,6 +152,7 @@ export default function UsibarHome() {
     [noticeShown, setNoticeShown] = useState(false),
     [noticeEdit, setNoticeEdit] = useState(false),
     [pickerAt, setPickerAt] = useState<number | null>(null),
+    [photoJob, setPhotoJob] = useState<({ source: File | string } & PhotoEditorOpts) | null>(null),
     [waHello, setWaHello] = useState(false);
   const root = useRef<HTMLElement>(null),
     dialog = useRef<HTMLDivElement>(null),
@@ -650,6 +652,7 @@ export default function UsibarHome() {
         return { ...c, styles };
       }),
     upload,
+    openPhotoEditor: (source: File | string, opts: PhotoEditorOpts) => setPhotoJob({ source, ...opts }),
     fields,
     hidden: content.hidden,
     setHidden: (k: string, label: string, hide: boolean) =>
@@ -894,7 +897,7 @@ export default function UsibarHome() {
         </span>
         <span className="image-bracket tl" />
         <span className="image-bracket br" />
-        <ImageSwap label="foto da empresa" onChange={(url) => commit("Foto da empresa trocada", (c) => ({ ...c, company: { ...c.company, benchImageUrl: url } }))} />
+        <ImageSwap src={company.benchImageUrl} label="foto da empresa" onChange={(url) => commit("Foto da empresa trocada", (c) => ({ ...c, company: { ...c.company, benchImageUrl: url } }))} />
       </div>
       <div className="origin-copy reveal">
         <span className="eyebrow">
@@ -1223,7 +1226,7 @@ export default function UsibarHome() {
                 </span>
               </Removable>
               <HeroArt src={heroImage} />
-              <ImageSwap label="foto do topo" cutout onChange={(url) => commit("Foto do topo trocada", (c) => ({ ...c, company: { ...c.company, heroImageUrl: url } }))} />
+              <ImageSwap src={heroImage} label="foto do topo" cutout onChange={(url) => commit("Foto do topo trocada", (c) => ({ ...c, company: { ...c.company, heroImageUrl: url } }))} />
             </div>
           </div>
           <ProofBar company={company} />
@@ -1391,6 +1394,21 @@ export default function UsibarHome() {
           />
         )}
         {adminsOpen && <AdminsPanel lenis={lenisRef.current} onClose={() => setAdminsOpen(false)} />}
+        {photoJob && (
+          <PhotoEditorModal
+            source={photoJob.source}
+            initialRemoveBg={photoJob.cutout}
+            label={photoJob.label}
+            lenis={lenisRef.current}
+            onClose={() => setPhotoJob(null)}
+            onApply={async (editedFile) => {
+              const url = await upload(editedFile, false);
+              if (!url) throw Error("Não foi possível enviar a imagem.");
+              photoJob.onSave(url);
+              setPhotoJob(null);
+            }}
+          />
+        )}
         {logged && (
           <EditBar
             editing={editing}

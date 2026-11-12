@@ -80,3 +80,37 @@ test("all bundled hydraulic part WebP assets have clean alpha cutouts and opaque
     assert.ok(semi < opaque * 0.15, `${rel} interior is crisp and not translucent`);
   }
 });
+
+test("removeBackground tolerance option cuts slightly shadowed studio backdrop while preserving part", () => {
+  const w = 30,
+    h = 30;
+  const raw = new Uint8Array(w * h * 4);
+  // Backdrop starts at 245 at edges and dips to 222 near the part (studio shadow)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = (y * w + x) * 4;
+      const nearPart = x >= 6 && x <= 23 && y >= 6 && y <= 23;
+      const v = nearPart ? 222 : 246;
+      raw[p] = v;
+      raw[p + 1] = v;
+      raw[p + 2] = v;
+      raw[p + 3] = 255;
+    }
+  }
+  // Dark painted cylinder body in center (10..19)
+  for (let y = 10; y <= 19; y++) {
+    for (let x = 10; x <= 19; x++) {
+      const p = (y * w + x) * 4;
+      raw[p] = 40;
+      raw[p + 1] = 44;
+      raw[p + 2] = 46;
+    }
+  }
+  const strictOut = removeBackground(new Uint8Array(raw), w, h, { tolerance: 0 });
+  const tolerantOut = removeBackground(new Uint8Array(raw), w, h, { tolerance: 22 });
+  // Shadow pixel at (8, 15) stays opaque at tolerance=0, gets cleanly removed at tolerance=22
+  assert.equal(strictOut[(15 * w + 8) * 4 + 3], 255);
+  assert.equal(tolerantOut[(15 * w + 8) * 4 + 3], 0);
+  // Dark cylinder center stays 100% opaque in both
+  assert.equal(tolerantOut[(15 * w + 15) * 4 + 3], 255);
+});

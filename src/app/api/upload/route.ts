@@ -2,12 +2,48 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { authorize, sameOrigin } from "@/lib/auth";
 import { removeBackground } from "@/lib/cutout.mjs";
-import { readOnlyError, store } from "@/lib/content";
+import { imageBase, readOnlyError, store } from "@/lib/content";
 import { networkProblem } from "@/lib/net.mjs";
 export const runtime = "nodejs";
 // Saves Supabase storage and egress: longest side 1600 px, WebP, at most 1 MB (bucket limit).
 const MAX_SIDE = 1600;
 const MAX_RESULT = 1024 * 1024;
+const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Proxy for loading an already-published bucket photo into the client-side photo editor when CORS/proxy blocks direct canvas read.
+export async function GET(req: Request) {
+  if (!sameOrigin(req))
+    return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
+  const access = await authorize(req);
+  if (!access.ok)
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  const target = new URL(req.url).searchParams.get("url") ?? "";
+  const base = imageBase();
+  const allowed = base ? new RegExp("^" + escapeRe(base) + "usibar-[a-f0-9-]{36}\\.webp$") : null;
+  if (!allowed || !allowed.test(target))
+    return NextResponse.json({ error: "Endereço de imagem inválido." }, { status: 400 });
+  try {
+    const upstream = await fetch(target, { cache: "no-store" });
+    if (!upstream.ok)
+      return NextResponse.json({ error: "Não foi possível abrir a imagem." }, { status: 404 });
+    const bytes = await upstream.arrayBuffer();
+    if (bytes.byteLength > 9 * 1024 * 1024)
+      return NextResponse.json({ error: "Imagem excede o limite." }, { status: 413 });
+    return new NextResponse(bytes, {
+      headers: {
+        "Content-Type": upstream.headers.get("content-type") || "image/webp",
+        "Cache-Control": "private, max-age=300",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (e) {
+    const problem = networkProblem(e, "o Supabase");
+    return NextResponse.json(
+      { error: problem?.message ?? "Não foi possível carregar a imagem para edição." },
+      { status: 502 },
+    );
+  }
+}
 export async function POST(req: Request) {
   const s = store();
   if (s.readonly)
@@ -43,11 +79,13 @@ export async function POST(req: Request) {
       .rotate()
       .resize(MAX_SIDE, MAX_SIDE, { fit: "inside", withoutEnlargement: true });
     if (form.get("removeBg") === "true") {
+      const tolRaw = Number(form.get("tolerance") ?? 0);
+      const tolerance = Number.isFinite(tolRaw) ? tolRaw : 0;
       const { data, info } = await pipeline
         .ensureAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
-      pipeline = sharp(removeBackground(data, info.width, info.height), {
+      pipeline = sharp(removeBackground(data, info.width, info.height, { tolerance }), {
         raw: { width: info.width, height: info.height, channels: 4 },
       });
     }

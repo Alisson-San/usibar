@@ -34,6 +34,14 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Usibar Usinagens Especiais | Cilindros e blocos hidráulicos sob medida — Barão/RS",
   description,
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml", sizes: "any" },
+      { url: "/favicon.ico", type: "image/x-icon", sizes: "16x16 32x32 48x48" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
+  },
   openGraph: {
     title: "Usibar — Tecnologia em hidráulica",
     description,
