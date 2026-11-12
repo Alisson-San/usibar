@@ -75,7 +75,7 @@ export function validNotice(n) {
 /** True when the notice should be shown on `today` (YYYY-MM-DD, the visitor's local date). */
 export const noticeActive = (n, today) => !!n?.enabled && today >= n.start && today <= n.end;
 // Texts and buttons of the fixed sections the admin removed (they come back with "Recolocar").
-export const validHidden = (h) => Array.isArray(h) && h.length <= 200 && h.every((k) => typeof k === "string" && /^[a-z0-9][a-z0-9._-]{0,79}$/i.test(k));
+export const validHidden = (h) => Array.isArray(h) && h.length <= 500 && h.every((k) => typeof k === "string" && /^[a-z0-9][a-z0-9._-]{0,79}$/i.test(k));
 /* Internal product code (not shown on the site; kept for references and the assistant):
    the next free one in the pattern of the category, USB-CH-01 for cylinders, USB-BH-01 for blocks. */
 export function nextCode(category, codes) {
@@ -675,7 +675,7 @@ export function acceptActions(calls, site, texts) {
         return Object.keys(sv).length ? { service: a.service, ...sv } : null;
       }
       case "remove_service": {
-        if (!services.has(a.service) || services.size <= 1) return null;
+        if (!services.has(a.service)) return null;
         services.delete(a.service);
         return { service: a.service };
       }
@@ -715,7 +715,7 @@ export function acceptActions(calls, site, texts) {
         return Object.keys(out).length > 1 ? out : null;
       }
       case "remove_pillar": {
-        if (!pillars.has(a.pillar) || pillars.size <= 1) return null;
+        if (!pillars.has(a.pillar)) return null;
         pillars.delete(a.pillar);
         return { pillar: a.pillar };
       }
@@ -1181,7 +1181,6 @@ export function applyAction(c, { name, args: a }, ctx) {
     case "remove_service": {
       const list = c.services ?? [];
       const cur = list.find((s) => s.id === a.service) ?? fail("Essa solução não existe mais.");
-      if (list.length <= 1) fail("Mantenha pelo menos uma solução na seção.");
       return { content: { ...c, services: list.filter((s) => s.id !== cur.id) }, label: `Solução “${cur.title}” removida` };
     }
     case "add_sector": {
@@ -1219,7 +1218,6 @@ export function applyAction(c, { name, args: a }, ctx) {
     case "remove_pillar": {
       const list = c.pillars ?? [];
       const cur = list.find((p) => p.id === a.pillar) ?? fail("Esse pilar não existe mais.");
-      if (list.length <= 1) fail("Mantenha pelo menos um pilar.");
       return { content: { ...c, pillars: list.filter((p) => p.id !== cur.id) }, label: `Pilar “${cur.title}” removido` };
     }
     case "update_process_step": {

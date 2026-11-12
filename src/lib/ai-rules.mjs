@@ -26,7 +26,7 @@ export const FIELD_ACTIONS = {
   custom: "Siga a instrução do administrador.",
 };
 
-const LIMITS = { text: 4000, label: 120, instruction: 500, fields: 200, total: 40000 };
+const LIMITS = { text: 4000, label: 120, instruction: 500, fields: 400, total: 40000 };
 const str = (v, max) => typeof v === "string" && v.length <= max;
 const keyOk = (k) => typeof k === "string" && /^[a-z0-9][a-z0-9._-]{0,79}$/i.test(k);
 
@@ -37,7 +37,7 @@ export function validateAiRequest(body) {
   if (body.action === "review") {
     const fields = body.fields;
     if (!Array.isArray(fields) || fields.length === 0 || fields.length > LIMITS.fields)
-      return { ok: false, error: "Envie entre 1 e 200 textos para revisar." };
+      return { ok: false, error: `Envie entre 1 e ${LIMITS.fields} textos para revisar.` };
     let total = 0;
     for (const f of fields) {
       if (!f || !keyOk(f.key) || !str(f.label, LIMITS.label) || !str(f.text, LIMITS.text))
@@ -258,7 +258,7 @@ export function validateChatRequest(body) {
         typeof b.hidden === "boolean" &&
         list(b.blocks ?? [], 40, (x) => shortStr(x.id, 16) && BLOCK_KINDS.includes(x.kind) && shortStr(x.text ?? "", 200)),
     ) &&
-    list(site.removables ?? [], 200, (r) => shortStr(r.key, 80) && shortStr(r.label, 120) && typeof r.hidden === "boolean") &&
+    list(site.removables ?? [], 500, (r) => shortStr(r.key, 80) && shortStr(r.label, 120) && typeof r.hidden === "boolean") &&
     (site.notice === undefined || (typeof site.notice === "object" && JSON.stringify(site.notice).length <= 2000)) &&
     list(
       site.products,

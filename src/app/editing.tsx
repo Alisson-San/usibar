@@ -283,9 +283,8 @@ export function ProductEditor({
             </fieldset>
           </div>
           <label>
-            <span className="tiny-mono">Especificações</span>
+            <span className="tiny-mono">Especificações (opcional)</span>
             <input
-              required
               maxLength={300}
               value={item.specs}
               onChange={(e) => set("specs", e.target.value)}
@@ -304,9 +303,8 @@ export function ProductEditor({
             />
           </label>
           <label>
-            <span className="tiny-mono">Descrição</span>
+            <span className="tiny-mono">Descrição (opcional)</span>
             <textarea
-              required
               rows={4}
               maxLength={4000}
               value={item.description}

@@ -130,7 +130,7 @@ export function validData(data, { remoteBase = null } = {}) {
       data.copy &&
       typeof data.copy === "object" &&
       !Array.isArray(data.copy) &&
-      Object.keys(data.copy).length <= 400 &&
+      Object.keys(data.copy).length <= 800 &&
       Object.entries(data.copy).every(([k, v]) => /^[a-z0-9][a-z0-9._-]{0,59}$/.test(k) && text(v, 1200))
     )
   )
@@ -169,7 +169,9 @@ export function validData(data, { remoteBase = null } = {}) {
     data.products.every(
       (p) =>
         p &&
-        ["id", "code", "title", "specs", "description"].every((k) => text(p[k])) &&
+        ["id", "code", "title"].every((k) => text(p[k])) &&
+        opt(p.specs, 4000) &&
+        opt(p.description, 4000) &&
         ["cilindros", "blocos"].includes(p.category) &&
         typeof p.featured === "boolean" &&
         image(p.imageUrl),

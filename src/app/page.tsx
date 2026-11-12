@@ -17,7 +17,7 @@ import {
   type Part,
   type SaveState,
 } from "./editing";
-import { CopyContext, ImageSwap, Removable, T, type Field, type PhotoEditorOpts, type TextStyle } from "./copy";
+import { CopyContext, ImageSwap, Removable, SectionEyebrow, SectionHeading, T, type Field, type PhotoEditorOpts, type TextStyle } from "./copy";
 import { PhotoEditorModal } from "./photo-editor";
 import { TextToolbar, type AiStatus } from "./assistant";
 import { ChatPanel, type ChatAction, type ChatSite } from "./chat";
@@ -548,7 +548,7 @@ export default function UsibarHome() {
           ),
         );
         dock
-          .to(".site-header .header-contact, .site-header .menu-toggle", { autoAlpha: 0, duration: 0.25 }, 0)
+          .to(".site-header .header-cta-slot, .site-header .header-contact, .site-header .menu-toggle", { autoAlpha: 0, duration: 0.25 }, 0)
           .to(".site-header .header-bg", { opacity: 0, duration: 0.4 }, 0.1)
           .to(".site-header .brand", { scale: 0.82, transformOrigin: "0% 50%", duration: 0.6, ease: "power2.inOut" }, 0.2)
           .to(".site-header .brand-plate", { opacity: 1, duration: 0.3 }, 0.1)
@@ -791,16 +791,15 @@ export default function UsibarHome() {
     <section className="product-section" id="pecas">
       <div className="section-head reveal">
         <div>
-          <span className="eyebrow">
-            {num} — <T k="catalog.eyebrow" d="CATÁLOGO DE COMPONENTES" label="Catálogo — rótulo" />
-          </span>
-          <h2>
-            <T k="catalog.title.1" d="Modelos que já produzimos." label="Catálogo — título" />
-            <br />
-            <em>
-              <T k="catalog.title.2" d="Ponto de partida para o seu projeto." label="Catálogo — título (destaque)" />
-            </em>
-          </h2>
+          <SectionEyebrow num={num} numKey="catalog.num" eyebrowKey="catalog.eyebrow" defaultLabel="CATÁLOGO DE COMPONENTES" sectionLabel="Catálogo" />
+          <SectionHeading
+            k1="catalog.title.1"
+            d1="Modelos que já produzimos."
+            l1="Catálogo — título"
+            k2="catalog.title.2"
+            d2="Ponto de partida para o seu projeto."
+            l2="Catálogo — título (destaque)"
+          />
         </div>
         <Removable k="catalog.intro" label="Catálogo — introdução" block>
           <p>
@@ -808,29 +807,35 @@ export default function UsibarHome() {
           </p>
         </Removable>
       </div>
-      <div className="catalog-toolbar">
-        <div className="catalog-tabs" role="group" aria-label="Filtrar por categoria">
-          {[
-            ["all", "catalog.tab.all", "Todas as peças"],
-            ["cilindros", "catalog.tab.cilindros", "Cilindros"],
-            ["blocos", "catalog.tab.blocos", "Blocos"],
-          ].map(([value, k, d]) => (
-            <button key={value} aria-pressed={filter === value} className={filter === value ? "selected" : ""} onClick={() => setFilter(value)}>
-              <T k={k} d={d} label="Catálogo — filtro" />
-              <span>{value === "all" ? products.length : products.filter((p) => p.category === value).length}</span>
-            </button>
-          ))}
-        </div>
-        <span className="tiny-mono" aria-live="polite">
-          {editing ? (
-            "CLIQUE EM UMA PEÇA PARA EDITAR ↙"
-          ) : (
-            <>
-              {parts.length} <T k="catalog.count" d="MODELOS · PRODUÇÃO CONFORME PROJETO" label="Catálogo — contador" />
-            </>
+      {(editing || !hidden.includes("catalog.tabs") || !hidden.includes("catalog.count.num") || !hidden.includes("catalog.count")) && (
+        <div className="catalog-toolbar">
+          <Removable k="catalog.tabs" label="Catálogo — filtros" block>
+            <div className="catalog-tabs" role="group" aria-label="Filtrar por categoria">
+              {[
+                ["all", "catalog.tab.all", "Todas as peças"],
+                ["cilindros", "catalog.tab.cilindros", "Cilindros"],
+                ["blocos", "catalog.tab.blocos", "Blocos"],
+              ].map(([value, k, d]) => (
+                <button key={value} aria-pressed={filter === value} className={filter === value ? "selected" : ""} onClick={() => setFilter(value)}>
+                  <T k={k} d={d} label="Catálogo — filtro" />
+                  <span>{value === "all" ? products.length : products.filter((p) => p.category === value).length}</span>
+                </button>
+              ))}
+            </div>
+          </Removable>
+          {(editing || !hidden.includes("catalog.count.num") || !hidden.includes("catalog.count")) && (
+            <span className="tiny-mono catalog-counter" aria-live="polite">
+              <Removable k="catalog.count.num" label="Catálogo — número de modelos">
+                <span>{parts.length}</span>
+              </Removable>
+              {!hidden.includes("catalog.count.num") && !hidden.includes("catalog.count") && " "}
+              <Removable k="catalog.count" label="Catálogo — contador">
+                <T k="catalog.count" d="MODELOS · PRODUÇÃO CONFORME PROJETO" label="Catálogo — contador" />
+              </Removable>
+            </span>
           )}
-        </span>
-      </div>
+        </div>
+      )}
       <div className="product-grid">
         {editing && (
           <button className="product-card product-add" onClick={() => setEditorPart({ ...blankPart, category: filter === "blocos" ? "blocos" : "cilindros" })}>
@@ -861,7 +866,7 @@ export default function UsibarHome() {
               <div>
                 <span className="eyebrow">{part.category === "cilindros" ? tx("catalog.cat.cilindros", "CILINDRO HIDRÁULICO") : tx("catalog.cat.blocos", "BLOCO HIDRÁULICO")}</span>
                 <h3>{part.title}</h3>
-                <span className="product-specs">{part.specs}</span>
+                {part.specs && <span className="product-specs">{part.specs}</span>}
               </div>
               <span className="round-arrow" aria-hidden="true">
                 {editing ? "✎" : "↗"}
@@ -870,21 +875,33 @@ export default function UsibarHome() {
           </button>
         ))}
       </div>
-      <div className="catalog-close">
-        <span className="mini-cross" aria-hidden="true">
-          ✳
-        </span>
-        <p>
-          <T k="catalog.close.1" d="Não encontrou a configuração que precisa?" label="Catálogo — fechamento" />
-          <br />
-          <strong>
-            <T k="catalog.close.2" d="Fabricamos conforme as especificações do seu projeto." label="Catálogo — fechamento (destaque)" />
-          </strong>
-        </p>
-        <a href="#orcamento">
-          <T k="catalog.close.cta" d="Enviar especificações" label="Catálogo — botão" /> <Arrow />
-        </a>
-      </div>
+      {(editing || !hidden.includes("catalog.close.1") || !hidden.includes("catalog.close.2") || !hidden.includes("catalog.close.cta")) && (
+        <div className="catalog-close">
+          <span className="mini-cross" aria-hidden="true">
+            ✳
+          </span>
+          {(editing || !hidden.includes("catalog.close.1") || !hidden.includes("catalog.close.2")) && (
+            <p>
+              <Removable k="catalog.close.1" label="Catálogo — fechamento">
+                <T k="catalog.close.1" d="Não encontrou a configuração que precisa?" label="Catálogo — fechamento" />
+              </Removable>
+              {!hidden.includes("catalog.close.1") && !hidden.includes("catalog.close.2") && <br />}
+              {(editing || !hidden.includes("catalog.close.2")) && (
+                <strong>
+                  <Removable k="catalog.close.2" label="Catálogo — fechamento (destaque)">
+                    <T k="catalog.close.2" d="Fabricamos conforme as especificações do seu projeto." label="Catálogo — fechamento (destaque)" />
+                  </Removable>
+                </strong>
+              )}
+            </p>
+          )}
+          <Removable k="catalog.close.cta" label="Catálogo — botão">
+            <a href="#orcamento">
+              <T k="catalog.close.cta" d="Enviar especificações" label="Catálogo — botão" /> <Arrow />
+            </a>
+          </Removable>
+        </div>
+      )}
     </section>
   );
 
@@ -892,35 +909,60 @@ export default function UsibarHome() {
     <section className="origin" id="origem">
       <div className="origin-image">
         <img src={company.benchImageUrl} alt="Cilindros hidráulicos fabricados pela Usibar sobre a bancada da oficina" />
-        <span className="image-caption tiny-mono">
-          <T k="origin.caption" d="DENTRO DA USIBAR" label="Empresa — legenda da foto" /> / {company.city}
-        </span>
+        {(editing || !hidden.includes("origin.caption") || !hidden.includes("origin.city")) && (
+          <span className="image-caption tiny-mono">
+            <Removable k="origin.caption" label="Empresa — legenda da foto">
+              <T k="origin.caption" d="DENTRO DA USIBAR" label="Empresa — legenda da foto" />
+            </Removable>
+            {!hidden.includes("origin.caption") && !hidden.includes("origin.city") && " / "}
+            <Removable k="origin.city" label="Empresa — cidade na foto">
+              <T k="origin.city" d={company.city ?? ""} label="Empresa — cidade na foto" />
+            </Removable>
+          </span>
+        )}
         <span className="image-bracket tl" />
         <span className="image-bracket br" />
         <ImageSwap src={company.benchImageUrl} label="foto da empresa" onChange={(url) => commit("Foto da empresa trocada", (c) => ({ ...c, company: { ...c.company, benchImageUrl: url } }))} />
       </div>
       <div className="origin-copy reveal">
-        <span className="eyebrow">
-          {num} — <T k="origin.eyebrow" d="A EMPRESA" label="Empresa — rótulo" />
-        </span>
-        <h2>
-          <T k="origin.title.1" d="Usibar." label="Empresa — título" />
-          <br />
-          <em>
-            <T k="origin.title.2" d="Usinagens especiais." label="Empresa — título (destaque)" />
-          </em>
-        </h2>
-        <p>{text("aboutParagraph1", "Apresentação — parágrafo 1")}</p>
-        <p>{text("aboutParagraph2", "Apresentação — parágrafo 2")}</p>
-        <p>{text("aboutParagraph3", "Apresentação — parágrafo 3")}</p>
-        <div className="origin-stat">
-          <strong>{text("experienceYears", "Anos de experiência")}</strong>
-          <span>
-            <T k="origin.stat" d="ANOS DE EXPERIÊNCIA EM TECNOLOGIA HIDRÁULICA" label="Empresa — legenda do número" />
-          </span>
-        </div>
+        <SectionEyebrow num={num} numKey="origin.num" eyebrowKey="origin.eyebrow" defaultLabel="A EMPRESA" sectionLabel="Empresa" />
+        <SectionHeading
+          k1="origin.title.1"
+          d1="Usibar."
+          l1="Empresa — título"
+          k2="origin.title.2"
+          d2="Usinagens especiais."
+          l2="Empresa — título (destaque)"
+        />
+        <Removable k="origin.p1" label="Apresentação — parágrafo 1" block>
+          <p>{text("aboutParagraph1", "Apresentação — parágrafo 1")}</p>
+        </Removable>
+        <Removable k="origin.p2" label="Apresentação — parágrafo 2" block>
+          <p>{text("aboutParagraph2", "Apresentação — parágrafo 2")}</p>
+        </Removable>
+        <Removable k="origin.p3" label="Apresentação — parágrafo 3" block>
+          <p>{text("aboutParagraph3", "Apresentação — parágrafo 3")}</p>
+        </Removable>
+        {(editing || !hidden.includes("origin.years") || !hidden.includes("origin.stat")) && (
+          <div className="origin-stat">
+            {(editing || !hidden.includes("origin.years")) && (
+              <strong>
+                <Removable k="origin.years" label="Empresa — anos de experiência">
+                  <T k="origin.years" d={company.experienceYears ?? ""} label="Empresa — anos de experiência" />
+                </Removable>
+              </strong>
+            )}
+            {(editing || !hidden.includes("origin.stat")) && (
+              <span>
+                <Removable k="origin.stat" label="Empresa — legenda do número">
+                  <T k="origin.stat" d="ANOS DE EXPERIÊNCIA EM TECNOLOGIA HIDRÁULICA" label="Empresa — legenda do número" />
+                </Removable>
+              </span>
+            )}
+          </div>
+        )}
       </div>
-      <Pillars pillars={pillars} ed={ed} />
+      <Pillars pillars={pillars} ed={ed} apply={(change, label) => commit(label, change)} />
     </section>
   );
 
@@ -928,16 +970,15 @@ export default function UsibarHome() {
     <section className="sectors-section" id="segmentos" aria-labelledby="sectors-title">
       <div className="section-head reveal">
         <div>
-          <span className="eyebrow" id="sectors-title">
-            {num} — <T k="sectors.eyebrow" d="SEGMENTOS ATENDIDOS" label="Segmentos — rótulo" />
-          </span>
-          <h2>
-            <T k="sectors.title.1" d="Onde nossos componentes" label="Segmentos — título" />
-            <br />
-            <em>
-              <T k="sectors.title.2" d="trabalham todos os dias." label="Segmentos — título (destaque)" />
-            </em>
-          </h2>
+          <SectionEyebrow id="sectors-title" num={num} numKey="sectors.num" eyebrowKey="sectors.eyebrow" defaultLabel="SEGMENTOS ATENDIDOS" sectionLabel="Segmentos" />
+          <SectionHeading
+            k1="sectors.title.1"
+            d1="Onde nossos componentes"
+            l1="Segmentos — título"
+            k2="sectors.title.2"
+            d2="trabalham todos os dias."
+            l2="Segmentos — título (destaque)"
+          />
         </div>
       </div>
       <ul className="sector-grid">
@@ -954,9 +995,11 @@ export default function UsibarHome() {
               )}
             </h3>
             {s.id === "elevadores" && (
-              <span className="sector-badge">
-                <T k="sectors.badge" d="Atuação de destaque" label="Segmentos — selo" />
-              </span>
+              <Removable k="sectors.badge" label="Segmentos — selo">
+                <span className="sector-badge">
+                  <T k="sectors.badge" d="Atuação de destaque" label="Segmentos — selo" />
+                </span>
+              </Removable>
             )}
             {editing && (
               <button
@@ -1071,10 +1114,12 @@ export default function UsibarHome() {
                 </a>
               ))}
           </nav>
-          <a className="header-contact" href="#orcamento" aria-current={section === "orcamento" ? "location" : undefined}>
-            <T k="header.cta" d="Solicitar orçamento" label="Cabeçalho — botão" />
-            {quote.refs.length > 0 ? <b className="quote-count">{quote.refs.length}</b> : <Arrow />}
-          </a>
+          <Removable k="header.cta" label="Cabeçalho — botão" className="header-cta-slot">
+            <a className="header-contact" href="#orcamento" aria-current={section === "orcamento" ? "location" : undefined}>
+              <T k="header.cta" d="Solicitar orçamento" label="Cabeçalho — botão" />
+              {quote.refs.length > 0 ? <b className="quote-count">{quote.refs.length}</b> : <Arrow />}
+            </a>
+          </Removable>
           <button className="menu-toggle" aria-expanded={menu} aria-controls="index-menu" onClick={() => setMenu(true)}>
             <i aria-hidden="true" />
             <span>{tx("header.index", "Índice")}</span>
@@ -1114,18 +1159,20 @@ export default function UsibarHome() {
           </button>
         </nav>
 
-        <a
-          className={"wa-float" + (waHello ? " hello" : "")}
-          href={wa(tx("wa.float.msg", "Olá, equipe Usibar! Gostaria de falar sobre um projeto."))}
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Falar com a Usibar pelo WhatsApp"
-        >
-          <Glyph name="whatsapp" />
-          <span>
-            <T k="wa.float" d="Fale no WhatsApp" label="Botão flutuante do WhatsApp" />
-          </span>
-        </a>
+        <Removable k="wa.float.btn" label="Botão flutuante do WhatsApp" className="wa-float-slot">
+          <a
+            className={"wa-float" + (waHello ? " hello" : "")}
+            href={wa(tx("wa.float.msg", "Olá, equipe Usibar! Gostaria de falar sobre um projeto."))}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Falar com a Usibar pelo WhatsApp"
+          >
+            <Glyph name="whatsapp" />
+            <span>
+              <T k="wa.float" d="Fale no WhatsApp" label="Botão flutuante do WhatsApp" />
+            </span>
+          </a>
+        </Removable>
 
         {menu && (
           <div className="index-menu" id="index-menu" role="dialog" aria-modal="true" aria-label={tx("header.index", "Índice")} data-lenis-prevent ref={indexRef}>
@@ -1175,24 +1222,42 @@ export default function UsibarHome() {
                   ))}
                 </span>
               )}
-              <h1 className="hero-title">
-                <span>
-                  <span className="line-inner">
-                    <T k="hero.title.1" d="CILINDROS" label="Título principal — linha 1" />
-                  </span>
-                </span>
-                <span>
-                  <span className="line-inner">
-                    <T k="hero.title.2" d="E BLOCOS" label="Título principal — linha 2" />
-                  </span>
-                </span>
-                <span className="accent-line">
-                  <span className="line-inner">
-                    <T k="hero.title.3" d="HIDRÁULICOS" label="Título principal — linha 3" />
-                    <span className="title-period">.</span>
-                  </span>
-                </span>
-              </h1>
+              {(editing || !hidden.includes("hero.title.1") || !hidden.includes("hero.title.2") || !hidden.includes("hero.title.3")) && (
+                <h1 className="hero-title">
+                  {(editing || !hidden.includes("hero.title.1")) && (
+                    <span>
+                      <span className="line-inner">
+                        <Removable k="hero.title.1" label="Título principal — linha 1">
+                          <T k="hero.title.1" d="CILINDROS" label="Título principal — linha 1" />
+                        </Removable>
+                      </span>
+                    </span>
+                  )}
+                  {(editing || !hidden.includes("hero.title.2")) && (
+                    <span>
+                      <span className="line-inner">
+                        <Removable k="hero.title.2" label="Título principal — linha 2">
+                          <T k="hero.title.2" d="E BLOCOS" label="Título principal — linha 2" />
+                        </Removable>
+                      </span>
+                    </span>
+                  )}
+                  {(editing || !hidden.includes("hero.title.3")) && (
+                    <span className="accent-line">
+                      <span className="line-inner">
+                        <Removable k="hero.title.3" label="Título principal — linha 3">
+                          <T k="hero.title.3" d="HIDRÁULICOS" label="Título principal — linha 3" />
+                        </Removable>
+                        {!hidden.includes("hero.title.3") && (
+                          <Removable k="hero.period" label="Título principal — ponto final">
+                            <span className="title-period">.</span>
+                          </Removable>
+                        )}
+                      </span>
+                    </span>
+                  )}
+                </h1>
+              )}
               <Removable k="hero.lead" label="Topo — lema" block>
                 <p className="hero-lead">{text("motto", "Lema da empresa")}</p>
               </Removable>
@@ -1305,9 +1370,9 @@ export default function UsibarHome() {
                 <span className="tiny-mono">{zoom ? `− ${tx("dialog.zoomout", "REDUZIR")}` : `+ ${tx("dialog.zoomin", "AMPLIAR DETALHES")}`}</span>
               </button>
               <div className="part-dialog-copy" key={active.id}>
-                <span className="eyebrow">{active.specs}</span>
+                {active.specs && <span className="eyebrow">{active.specs}</span>}
                 <h2 id="part-title">{active.title}</h2>
-                <p>{active.description}</p>
+                {active.description && <p>{active.description}</p>}
                 <div className="part-actions">
                   <a href={wa(`Olá! Gostaria de uma cotação para ${active.title}.`)} target="_blank" rel="noreferrer" className="solid-link">
                     <span className="with-glyph">

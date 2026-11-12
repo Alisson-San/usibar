@@ -36,7 +36,10 @@ export type Field = {
   get: () => string;
   commit: (value: string) => void;
   styled: boolean;
+  remove?: () => void;
 };
+
+export const RemovableContext = createContext<(() => void) | null>(null);
 
 export type PhotoEditorOpts = {
   label?: string;
@@ -126,6 +129,7 @@ export function Editable({
   editing,
   label,
   onCommit,
+  onRemove,
   className,
   styleKey,
   children,
@@ -134,15 +138,18 @@ export function Editable({
   editing: boolean;
   label: string;
   onCommit: (v: string) => void;
+  onRemove?: () => void;
   className?: string;
   styleKey?: string;
   children?: React.ReactNode;
 }) {
   const { styles, setStyle, fields, active, activate } = useContext(CopyContext);
+  const removable = useContext(RemovableContext);
+  const removeFn = onRemove ?? removable ?? undefined;
   const boxRef = useRef<HTMLSpanElement>(null);
   const ref = useRef<HTMLSpanElement>(null);
-  const latest = useRef({ value, onCommit, label });
-  latest.current = { value, onCommit, label };
+  const latest = useRef({ value, onCommit, label, removeFn });
+  latest.current = { value, onCommit, label, removeFn };
 
   const [live, setLive] = useState<TextStyle | null>(null);
   const [hud, setHud] = useState("");
@@ -256,6 +263,12 @@ export function Editable({
             if (ref.current) ref.current.textContent = v;
             if (v !== latest.current.value) latest.current.onCommit(v);
           },
+          remove: latest.current.removeFn
+            ? () => {
+                activate(null);
+                latest.current.removeFn?.();
+              }
+            : undefined,
         }
       : null;
 
@@ -456,8 +469,18 @@ export function Editable({
         }}
         onBlur={(e) => {
           const text = (e.currentTarget.textContent || "").replace(/\s+/g, " ").trim();
-          if (!text || text.length > 4000) e.currentTarget.textContent = value;
-          else if (text !== value) onCommit(text);
+          if (!text) {
+            if (latest.current.removeFn) {
+              activate(null);
+              latest.current.removeFn();
+            } else {
+              e.currentTarget.textContent = value;
+            }
+          } else if (text.length > 4000) {
+            e.currentTarget.textContent = value;
+          } else if (text !== value) {
+            onCommit(text);
+          }
         }}
       />
       {handles.resize && (
@@ -568,8 +591,20 @@ export function ImageSwap({
 
 /* A text or button the admin may remove from a fixed section. Visitors simply don't see it;
    while editing it shows a "×" and, once removed, a slim "↺ Recolocar" placeholder. */
-export function Removable({ k, label, children, block = false }: { k: string; label: string; children: React.ReactNode; block?: boolean }) {
-  const { editing, hidden, setHidden, removables } = useContext(CopyContext);
+export function Removable({
+  k,
+  label,
+  children,
+  block = false,
+  className,
+}: {
+  k: string;
+  label: string;
+  children: React.ReactNode;
+  block?: boolean;
+  className?: string;
+}) {
+  const { editing, hidden, setHidden, removables, activate } = useContext(CopyContext);
   useEffect(() => {
     const map = removables.current;
     map.set(k, label);
@@ -579,21 +614,115 @@ export function Removable({ k, label, children, block = false }: { k: string; la
   }, [k, label, removables]);
   const off = hidden.includes(k);
   const Tag = block ? "div" : "span";
+  const cls = (base: string) => (className ? `${base} ${className}` : base);
   if (!editing) return off ? null : <>{children}</>;
   if (off)
     return (
-      <Tag className="removed-slot">
-        <button type="button" onClick={() => setHidden(k, label, false)}>
+      <Tag className={cls("removed-slot")}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setHidden(k, label, false);
+          }}
+        >
           ↺ Recolocar “{label}”
         </button>
       </Tag>
     );
+  const hide = () => setHidden(k, label, true);
   return (
-    <Tag className="removable">
-      {children}
-      <button type="button" className="remove-x" aria-label={`Remover “${label}”`} title={`Remover “${label}”`} onClick={() => setHidden(k, label, true)}>
-        ×
-      </button>
-    </Tag>
+    <RemovableContext.Provider value={hide}>
+      <Tag className={cls("removable")}>
+        {children}
+        <button
+          type="button"
+          className="remove-x"
+          aria-label={`Remover “${label}”`}
+          title={`Remover “${label}”`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            activate(null);
+            hide();
+          }}
+        >
+          ×
+        </button>
+      </Tag>
+    </RemovableContext.Provider>
+  );
+}
+
+export function SectionEyebrow({
+  num,
+  numKey,
+  eyebrowKey,
+  defaultLabel,
+  sectionLabel,
+  id,
+  className = "eyebrow",
+}: {
+  num: string;
+  numKey: string;
+  eyebrowKey: string;
+  defaultLabel: string;
+  sectionLabel: string;
+  id?: string;
+  className?: string;
+}) {
+  const { editing, hidden } = useContext(CopyContext);
+  const numOff = hidden.includes(numKey);
+  const labelOff = hidden.includes(eyebrowKey);
+  if (!editing && numOff && labelOff) return null;
+  return (
+    <span className={className} id={id}>
+      <Removable k={numKey} label={`${sectionLabel} — numeração`}>
+        <T k={numKey} d={num} label={`${sectionLabel} — numeração`} />
+      </Removable>
+      {!numOff && !labelOff && " — "}
+      <Removable k={eyebrowKey} label={`${sectionLabel} — rótulo`}>
+        <T k={eyebrowKey} d={defaultLabel} label={`${sectionLabel} — rótulo`} />
+      </Removable>
+    </span>
+  );
+}
+
+export function SectionHeading({
+  id,
+  k1,
+  d1,
+  l1,
+  k2,
+  d2,
+  l2,
+}: {
+  id?: string;
+  k1: string;
+  d1: string;
+  l1: string;
+  k2: string;
+  d2: string;
+  l2: string;
+}) {
+  const { editing, hidden } = useContext(CopyContext);
+  const off1 = hidden.includes(k1);
+  const off2 = hidden.includes(k2);
+  if (!editing && off1 && off2) return null;
+  return (
+    <h2 id={id}>
+      <Removable k={k1} label={l1}>
+        <T k={k1} d={d1} label={l1} />
+      </Removable>
+      {!off1 && !off2 && <br />}
+      {(editing || !off2) && (
+        <em>
+          <Removable k={k2} label={l2}>
+            <T k={k2} d={d2} label={l2} />
+          </Removable>
+        </em>
+      )}
+    </h2>
   );
 }

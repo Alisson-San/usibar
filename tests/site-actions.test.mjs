@@ -246,3 +246,62 @@ test("assistant autonomy: multi-task batch, photo-less cadastros, structured CRU
   assert.deepEqual(cur.styles["hero.title.1"], { width: 88, align: "right" });
   assert.equal(validData(cur), true);
 });
+
+import { validateAiRequest } from "../src/lib/ai-rules.mjs";
+
+test("expanded removables, decoupled origin/service keys, zero-item lists and optional product fields stay valid", () => {
+  const removables = [
+    { key: "origin.caption", label: "Empresa — legenda da foto", hidden: false },
+    { key: "origin.city", label: "Empresa — cidade na foto", hidden: false },
+    { key: "origin.num", label: "Empresa — numeração", hidden: false },
+    { key: "origin.eyebrow", label: "Empresa — rótulo", hidden: false },
+    { key: "origin.p3", label: "Apresentação — parágrafo 3", hidden: false },
+    { key: "origin.years", label: "Empresa — anos de experiência", hidden: false },
+    { key: "service.cilindros.cta", label: "Solução 1 — botão orçar", hidden: false },
+    ...Array.from({ length: 240 }, (_, i) => ({ key: `extra.item.${i}`, label: `Campo ${i}`, hidden: i % 2 === 0 })),
+  ];
+  const manyTexts = Array.from({ length: 230 }, (_, i) => ({ key: `copy.k.${i}`, label: `Texto ${i}`, text: "Curto" }));
+  const chatCheck = validateAiRequest({
+    action: "chat",
+    messages: [{ role: "user", text: "remova Barão da legenda da foto da empresa" }],
+    site: {
+      ...site,
+      company: { phoneDisplay: content.company.phoneDisplay, whatsapp: content.company.whatsapp },
+      removables,
+      pillars: content.pillars.map(({ id, title, desc }) => ({ id, title, desc })),
+      services: content.services.map(({ id, title, lead, copy, category }) => ({ id, title, lead, copy, category })),
+    },
+    texts: manyTexts,
+  });
+  assert.equal(chatCheck.ok, true);
+
+  // Hiding origin.city independently of origin.caption + 240 other keys stays valid
+  const hiddenKeys = removables.filter((r) => r.hidden || r.key === "origin.city").map((r) => r.key);
+  assert.equal(
+    validData({
+      ...content,
+      hidden: hiddenKeys,
+      copy: { "origin.caption": "Usibar", "origin.city": "Barão/RS", "service.cilindros.cta": "Cotar cilindros" },
+      products: [{ ...content.products[0], specs: "", description: "" }],
+    }),
+    true,
+  );
+
+  // Removing every pillar and service down to zero is accepted by both AI actions and server validation
+  const siteWithAll = {
+    ...site,
+    pillars: content.pillars.map(({ id, title, desc }) => ({ id, title, desc })),
+    services: content.services.map(({ id, title, lead, copy, category }) => ({ id, title, lead, copy, category })),
+  };
+  const rmCalls = [
+    ...content.pillars.map((p) => ({ name: "remove_pillar", args: { pillar: p.id } })),
+    ...content.services.map((s) => ({ name: "remove_service", args: { service: s.id } })),
+  ];
+  const { actions, dropped } = acceptActions(rmCalls, siteWithAll, texts);
+  assert.equal(dropped, 0);
+  let next = content;
+  for (const act of actions) next = applyAction(next, act, ctx).content;
+  assert.equal(next.pillars.length, 0);
+  assert.equal(next.services.length, 0);
+  assert.equal(validData(next), true);
+});

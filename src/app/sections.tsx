@@ -1,8 +1,20 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { Company, Part } from "./editing";
 import type { Step } from "./ProcessSection";
-import { ImageSwap, Removable, T, useEditing, useHidden, useText, type TextStyle } from "./copy";
+import {
+  CopyContext,
+  ImageSwap,
+  Removable,
+  RemovableContext,
+  SectionEyebrow,
+  SectionHeading,
+  T,
+  useEditing,
+  useHidden,
+  useText,
+  type TextStyle,
+} from "./copy";
 import type { Block } from "./blocks";
 import { LogoFull } from "./logo";
 
@@ -137,29 +149,86 @@ export function SocialLinks({ company, className = "social-links" }: { company: 
 /* Hero: the part is presented like an inspection sheet, with callouts drawn on it.
    Callouts point at the default photo, so a replaced photo is shown clean. */
 const callouts = [
-  { n: "01", k: "hero.callout.1", d: "OLHAL DE FIXAÇÃO USINADO", at: [112, 212], path: "M112 212 L82 296 H-6", text: [-6, 314], anchor: "start" },
-  { n: "02", k: "hero.callout.2", d: "CABEÇOTE USINADO", at: [252, 140], path: "M252 140 L214 46 H118", text: [118, 36], anchor: "start" },
-  { n: "03", k: "hero.callout.3", d: "TIRANTES DE FECHAMENTO", at: [352, 120], path: "M352 120 L392 26 H540", text: [540, 16], anchor: "end" },
+  { n: "01", k: "hero.callout.1", label: "Topo — legenda 01", d: "OLHAL DE FIXAÇÃO USINADO", at: [112, 212], path: "M112 212 L82 296 H-6", text: [-6, 314], anchor: "start" },
+  { n: "02", k: "hero.callout.2", label: "Topo — legenda 02", d: "CABEÇOTE USINADO", at: [252, 140], path: "M252 140 L214 46 H118", text: [118, 36], anchor: "start" },
+  { n: "03", k: "hero.callout.3", label: "Topo — legenda 03", d: "TIRANTES DE FECHAMENTO", at: [352, 120], path: "M352 120 L392 26 H540", text: [540, 16], anchor: "end" },
 ] as const;
 
-function SvgLabel({ k, d, x, y, anchor, prefix, fill }: { k: string; d: string; x: number; y: number; anchor: "start" | "middle" | "end"; prefix?: string; fill: string }) {
-  const editing = useEditing();
+function SvgLabel({
+  k,
+  d,
+  label,
+  x,
+  y,
+  anchor,
+  prefix,
+  fill,
+}: {
+  k: string;
+  d: string;
+  label: string;
+  x: number;
+  y: number;
+  anchor: "start" | "middle" | "end";
+  prefix?: string;
+  fill: string;
+}) {
+  const { editing, hidden, setHidden, activate } = useContext(CopyContext);
   const t = useText();
+  const off = hidden.includes(k);
+  const numKey = `${k}.num`;
+  const numOff = prefix ? hidden.includes(numKey) : true;
   if (editing) {
-    const w = 300;
+    const w = 360;
     const left = anchor === "end" ? x - w : anchor === "middle" ? x - w / 2 : x;
+    if (off) {
+      return (
+        <foreignObject x={left} y={y - 18} width={w} height="28">
+          <div className={"svg-edit " + anchor}>
+            <span className="removed-slot">
+              <button type="button" onClick={() => setHidden(k, label, false)}>
+                ↺ Recolocar “{label}”
+              </button>
+            </span>
+          </div>
+        </foreignObject>
+      );
+    }
+    const hide = () => setHidden(k, label, true);
     return (
-      <foreignObject x={left} y={y - 15} width={w} height="22">
+      <foreignObject x={left} y={y - 18} width={w} height="28">
         <div className={"svg-edit " + anchor}>
-          {prefix && <b>{prefix}</b>}
-          <T k={k} d={d} label="Legenda da foto" />
+          {prefix && (
+            <Removable k={numKey} label={`${label} — número`}>
+              <b>
+                <T k={numKey} d={prefix} label={`${label} — número`} />
+              </b>
+            </Removable>
+          )}
+          <RemovableContext.Provider value={hide}>
+            <T k={k} d={d} label={label} />
+          </RemovableContext.Provider>
+          <button
+            type="button"
+            className="svg-remove-x"
+            aria-label={`Remover “${label}”`}
+            title={`Remover “${label}”`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              activate(null);
+              hide();
+            }}
+          >
+            ×
+          </button>
         </div>
       </foreignObject>
     );
   }
   return (
     <text className="hc-label" x={x} y={y} textAnchor={anchor} fill={fill} stroke="none">
-      {prefix && <tspan fill="var(--orange)">{prefix} </tspan>}
+      {prefix && !numOff && <tspan fill="var(--orange)">{t(numKey, prefix)} </tspan>}
       {t(k, d)}
     </text>
   );
@@ -167,6 +236,19 @@ function SvgLabel({ k, d, x, y, anchor, prefix, fill }: { k: string; d: string; 
 
 export function HeroArt({ src }: { src: string }) {
   const annotated = src === HERO_IMAGE;
+  const { editing, hidden, removables } = useContext(CopyContext);
+  useEffect(() => {
+    const map = removables.current;
+    if (annotated) {
+      for (const c of callouts) map.set(c.k, c.label);
+    }
+    map.set("hero.dimension", "Topo — cota inferior");
+    return () => {
+      for (const c of callouts) map.delete(c.k);
+      map.delete("hero.dimension");
+    };
+  }, [annotated, removables]);
+  const dimOff = hidden.includes("hero.dimension");
   return (
     <svg className="hero-art" viewBox="-40 -40 620 420" role="img" aria-label="Componente hidráulico Usibar">
       <g className="hero-target" fill="none" stroke="var(--line)">
@@ -179,19 +261,25 @@ export function HeroArt({ src }: { src: string }) {
       </g>
       <g className="hero-callouts" fontFamily="var(--font-mono), monospace" fontSize="11" letterSpacing="1">
         {annotated &&
-          callouts.map((c) => (
-            <g key={c.n} className="hc">
-              <path className="hc-line" d={c.path} pathLength={1} fill="none" stroke="var(--ink)" strokeWidth=".9" />
-              <circle className="hc-ring" cx={c.at[0]} cy={c.at[1]} r="9" fill="none" stroke="var(--orange)" />
-              <circle className="hc-dot" cx={c.at[0]} cy={c.at[1]} r="3.5" fill="var(--orange)" />
-              <SvgLabel k={c.k} d={c.d} x={c.text[0]} y={c.text[1]} anchor={c.anchor} prefix={c.n} fill="var(--ink)" />
-            </g>
-          ))}
-        <g className="hc" stroke="var(--muted)" fill="none" strokeWidth=".8">
-          <path className="hc-line" d="M58 340H452" pathLength={1} />
-          <path className="hc-label" d="M58 332v16M452 332v16" />
-          <SvgLabel k="hero.dimension" d="DIMENSÕES, CURSO E FIXAÇÕES CONFORME PROJETO" x={255} y={364} anchor="middle" fill="var(--muted)" />
-        </g>
+          callouts.map((c) => {
+            const off = hidden.includes(c.k);
+            if (!editing && off) return null;
+            return (
+              <g key={c.n} className="hc">
+                <path className="hc-line" d={c.path} pathLength={1} fill="none" stroke="var(--ink)" strokeWidth=".9" opacity={off ? 0.18 : 1} />
+                <circle className="hc-ring" cx={c.at[0]} cy={c.at[1]} r="9" fill="none" stroke="var(--orange)" opacity={off ? 0.18 : 1} />
+                <circle className="hc-dot" cx={c.at[0]} cy={c.at[1]} r="3.5" fill="var(--orange)" opacity={off ? 0.18 : 1} />
+                <SvgLabel k={c.k} d={c.d} label={c.label} x={c.text[0]} y={c.text[1]} anchor={c.anchor} prefix={c.n} fill="var(--ink)" />
+              </g>
+            );
+          })}
+        {(editing || !dimOff) && (
+          <g className="hc" stroke="var(--muted)" fill="none" strokeWidth=".8">
+            <path className="hc-line" d="M58 340H452" pathLength={1} opacity={dimOff ? 0.18 : 1} />
+            <path className="hc-label" d="M58 332v16M452 332v16" opacity={dimOff ? 0.18 : 1} />
+            <SvgLabel k="hero.dimension" d="DIMENSÕES, CURSO E FIXAÇÕES CONFORME PROJETO" label="Topo — cota inferior" x={255} y={364} anchor="middle" fill="var(--muted)" />
+          </g>
+        )}
       </g>
     </svg>
   );
@@ -250,6 +338,9 @@ export function Solutions({
   onBrowse: (category: string) => void;
   onQuote: (type: string) => void;
 }) {
+  const editing = useEditing();
+  const hidden = useHidden();
+  const tx = useText();
   const setService = (id: string, key: keyof Service) => (c: Content, v: string) => ({
     ...c,
     services: c.services.map((s) => (s.id === id ? { ...s, [key]: v } : s)),
@@ -257,16 +348,16 @@ export function Solutions({
   return (
     <section className="solutions" id="solucoes" aria-labelledby="solutions-title">
       <div className="section-intro reveal">
-        <span className="eyebrow">
-          {num} — <T k="solutions.eyebrow" d="SOLUÇÕES" label="Soluções — rótulo" />
-        </span>
-        <h2 id="solutions-title">
-          <T k="solutions.title.1" d="Soluções hidráulicas" label="Soluções — título" />
-          <br />
-          <em>
-            <T k="solutions.title.2" d="que movimentam resultados." label="Soluções — título (destaque)" />
-          </em>
-        </h2>
+        <SectionEyebrow num={num} numKey="solutions.num" eyebrowKey="solutions.eyebrow" defaultLabel="SOLUÇÕES" sectionLabel="Soluções" />
+        <SectionHeading
+          id="solutions-title"
+          k1="solutions.title.1"
+          d1="Soluções hidráulicas"
+          l1="Soluções — título"
+          k2="solutions.title.2"
+          d2="que movimentam resultados."
+          l2="Soluções — título (destaque)"
+        />
         <Removable k="solutions.intro" label="Soluções — introdução" block>
           <p>
             <T
@@ -277,60 +368,165 @@ export function Solutions({
           </p>
         </Removable>
       </div>
-      <div className="solution-grid">
-        {services.map((s, i) => {
-          const count = s.category === "all" ? 0 : products.filter((p) => p.category === s.category).length;
-          return (
-            <article className="solution-card" key={s.id}>
-              <div className="solution-figure">
-                <span className="solution-no">{String(i + 1).padStart(2, "0")}</span>
-                <img src={s.imageUrl} alt="" loading="lazy" />
-                <i className="dim dim-x" aria-hidden="true" />
-                <i className="dim dim-y" aria-hidden="true" />
-                <ImageSwap
-                  src={s.imageUrl}
-                  label="foto"
-                  cutout
-                  onChange={(url) =>
-                    apply((c) => ({ ...c, services: c.services.map((x) => (x.id === s.id ? { ...x, imageUrl: url } : x)) }), `Foto de “${s.title}” trocada`)
-                  }
-                />
-              </div>
-              <h3>{ed(s.title, `Solução ${i + 1} — título`, setService(s.id, "title"), `service.${s.id}.title`)}</h3>
-              <p className="solution-lead">{ed(s.lead, `Solução ${i + 1} — destaque`, setService(s.id, "lead"), `service.${s.id}.lead`)}</p>
-              <p>{ed(s.copy, `Solução ${i + 1} — texto`, setService(s.id, "copy"), `service.${s.id}.copy`)}</p>
-              <div className="solution-actions">
-                {count > 0 && (
-                  <button onClick={() => onBrowse(s.category)}>
-                    <T k="solutions.browse" d="Ver modelos" label="Botão ver modelos" /> ({count}) <Arrow down />
+      {(editing || services.length > 0) && (
+        <div className="solution-grid">
+          {services.map((s, i) => {
+            const count = s.category === "all" ? 0 : products.filter((p) => p.category === s.category).length;
+            const sid = s.id.toLowerCase().replace(/[^a-z0-9._-]/g, "-").slice(0, 36);
+            return (
+              <article className="solution-card" key={s.id}>
+                {editing && (
+                  <button
+                    type="button"
+                    className="card-remove"
+                    aria-label={`Remover solução ${s.title}`}
+                    title={`Remover solução “${s.title}”`}
+                    onClick={() => apply((c) => ({ ...c, services: c.services.filter((x) => x.id !== s.id) }), `Solução “${s.title}” removida`)}
+                  >
+                    ×
                   </button>
                 )}
-                <button onClick={() => onQuote(s.title)}>
-                  <T k="solutions.quote" d="Orçar" label="Botão orçar" /> {s.title.toLowerCase()} <Arrow />
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
+                <div className="solution-figure">
+                  {(editing || !hidden.includes(`service.${sid}.num`)) && (
+                    <span className="solution-no">
+                      <Removable k={`service.${sid}.num`} label={`Solução ${i + 1} — número`}>
+                        <T k={`service.${sid}.num`} d={String(i + 1).padStart(2, "0")} label={`Solução ${i + 1} — número`} />
+                      </Removable>
+                    </span>
+                  )}
+                  <img src={s.imageUrl} alt="" loading="lazy" />
+                  <i className="dim dim-x" aria-hidden="true" />
+                  <i className="dim dim-y" aria-hidden="true" />
+                  <ImageSwap
+                    src={s.imageUrl}
+                    label="foto"
+                    cutout
+                    onChange={(url) =>
+                      apply((c) => ({ ...c, services: c.services.map((x) => (x.id === s.id ? { ...x, imageUrl: url } : x)) }), `Foto de “${s.title}” trocada`)
+                    }
+                  />
+                </div>
+                <h3>{ed(s.title, `Solução ${i + 1} — título`, setService(s.id, "title"), `service.${sid}.title`)}</h3>
+                <Removable k={`service.${sid}.lead`} label={`Solução ${i + 1} — destaque`} block>
+                  <p className="solution-lead">{ed(s.lead, `Solução ${i + 1} — destaque`, setService(s.id, "lead"), `service.${sid}.lead`)}</p>
+                </Removable>
+                <Removable k={`service.${sid}.copy`} label={`Solução ${i + 1} — texto`} block>
+                  <p>{ed(s.copy, `Solução ${i + 1} — texto`, setService(s.id, "copy"), `service.${sid}.copy`)}</p>
+                </Removable>
+                <div className="solution-actions">
+                  {count > 0 && (
+                    <Removable k={`service.${sid}.browse`} label={`Solução ${i + 1} — botão ver modelos`}>
+                      <button onClick={() => onBrowse(s.category)}>
+                        <T k={`service.${sid}.browse`} d={`${tx("solutions.browse", "Ver modelos")} (${count})`} label={`Solução ${i + 1} — botão ver modelos`} /> <Arrow down />
+                      </button>
+                    </Removable>
+                  )}
+                  <Removable k={`service.${sid}.cta`} label={`Solução ${i + 1} — botão orçar`}>
+                    <button onClick={() => onQuote(s.title)}>
+                      <T k={`service.${sid}.cta`} d={`${tx("solutions.quote", "Orçar")} ${s.title.toLowerCase()}`} label={`Solução ${i + 1} — botão orçar`} /> <Arrow />
+                    </button>
+                  </Removable>
+                </div>
+              </article>
+            );
+          })}
+          {editing && services.length < 6 && (
+            <div className="solution-card solution-add-slot">
+              <button
+                type="button"
+                className="solution-add"
+                onClick={() =>
+                  apply(
+                    (c) => ({
+                      ...c,
+                      services: [
+                        ...c.services,
+                        {
+                          id: crypto.randomUUID().replace(/-/g, "").slice(0, 10),
+                          category: "all",
+                          title: "Nova solução",
+                          lead: "Destaque da solução.",
+                          copy: "Descreva como a Usibar desenvolve e produz esta solução.",
+                          imageUrl: "/assets/cilindro-olhal.webp",
+                        },
+                      ],
+                    }),
+                    "Solução adicionada",
+                  )
+                }
+              >
+                + Adicionar solução
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
 
-export function Pillars({ pillars, ed }: { pillars: Pillar[]; ed: Ed }) {
+export function Pillars({ pillars, ed, apply }: { pillars: Pillar[]; ed: Ed; apply: Apply }) {
+  const editing = useEditing();
+  if (!editing && pillars.length === 0) return null;
   const set = (id: string, key: keyof Pillar) => (c: Content, v: string) => ({
     ...c,
     pillars: c.pillars.map((p) => (p.id === id ? { ...p, [key]: v } : p)),
   });
   return (
     <ul className="pillars" aria-label="Nossos pilares">
-      {pillars.map((p, i) => (
-        <li key={p.id} className="reveal">
-          <span className="tiny-mono">{String(i + 1).padStart(2, "0")}</span>
-          <h3>{ed(p.title, `Pilar ${i + 1} — título`, set(p.id, "title"), `pillar.${p.id}.title`)}</h3>
-          <p>{ed(p.desc, `Pilar ${i + 1} — texto`, set(p.id, "desc"), `pillar.${p.id}.desc`)}</p>
+      {pillars.map((p, i) => {
+        const pid = p.id.toLowerCase().replace(/[^a-z0-9._-]/g, "-").slice(0, 36);
+        return (
+          <li key={p.id} className="reveal">
+            {editing && (
+              <button
+                type="button"
+                className="pillar-remove"
+                aria-label={`Remover pilar ${p.title}`}
+                title={`Remover pilar “${p.title}”`}
+                onClick={() => apply((c) => ({ ...c, pillars: c.pillars.filter((x) => x.id !== p.id) }), `Pilar “${p.title}” removido`)}
+              >
+                ×
+              </button>
+            )}
+            <Removable k={`pillar.${pid}.num`} label={`Pilar ${i + 1} — número`}>
+              <span className="tiny-mono">
+                <T k={`pillar.${pid}.num`} d={String(i + 1).padStart(2, "0")} label={`Pilar ${i + 1} — número`} />
+              </span>
+            </Removable>
+            <h3>{ed(p.title, `Pilar ${i + 1} — título`, set(p.id, "title"), `pillar.${pid}.title`)}</h3>
+            <Removable k={`pillar.${pid}.desc`} label={`Pilar ${i + 1} — texto`} block>
+              <p>{ed(p.desc, `Pilar ${i + 1} — texto`, set(p.id, "desc"), `pillar.${pid}.desc`)}</p>
+            </Removable>
+          </li>
+        );
+      })}
+      {editing && pillars.length < 8 && (
+        <li className="pillar-add-slot">
+          <button
+            type="button"
+            className="pillar-add"
+            onClick={() =>
+              apply(
+                (c) => ({
+                  ...c,
+                  pillars: [
+                    ...c.pillars,
+                    {
+                      id: crypto.randomUUID().replace(/-/g, "").slice(0, 10),
+                      title: "Novo pilar",
+                      desc: "Descreva este diferencial da Usibar.",
+                    },
+                  ],
+                }),
+                "Pilar adicionado",
+              )
+            }
+          >
+            + Adicionar pilar
+          </button>
         </li>
-      ))}
+      )}
     </ul>
   );
 }
@@ -469,10 +665,11 @@ export function QuoteBuilder({
     startedWith.current = quote.type;
   }, [quote.type, step]);
 
-  const steps: { key: keyof Quote; title: string; options: Option[] }[] = [
+  const steps: { key: keyof Quote; qk: string; defaultTitle: string; options: Option[] }[] = [
     {
       key: "type",
-      title: t("quote.q1", "O que você precisa?"),
+      qk: "quote.q1",
+      defaultTitle: "O que você precisa?",
       options: [
         ...services.map((s) => ({ value: s.title, hint: s.lead, icon: <img src={s.imageUrl} alt="" /> })),
         { value: t("quote.q1.other", "Outro componente"), hint: t("quote.q1.other.hint", "Peça especial sob desenho"), icon: <SectorIcon id="especiais" /> },
@@ -480,17 +677,20 @@ export function QuoteBuilder({
     },
     {
       key: "sector",
-      title: t("quote.q2", "Para qual aplicação?"),
+      qk: "quote.q2",
+      defaultTitle: "Para qual aplicação?",
       options: [...sectors.map((s) => ({ value: s.name, icon: <SectorIcon id={s.id} /> })), { value: t("quote.q2.other", "Outra aplicação"), icon: <SectorIcon id="help" /> }],
     },
     {
       key: "qty",
-      title: t("quote.q3", "Quantas peças, aproximadamente?"),
+      qk: "quote.q3",
+      defaultTitle: "Quantas peças, aproximadamente?",
       options: ["1 a 5 peças", "6 a 20 peças", "21 a 100 peças", "Mais de 100 peças"].map((v, i) => ({ value: t(`quote.q3.${i + 1}`, v), icon: <SectorIcon id="qty" /> })),
     },
     {
       key: "drawing",
-      title: t("quote.q4", "Você já tem o desenho técnico?"),
+      qk: "quote.q4",
+      defaultTitle: "Você já tem o desenho técnico?",
       options: [
         { value: t("quote.q4.yes", "Sim, vou enviar junto"), hint: t("quote.q4.yes.hint", "Anexe na conversa depois de enviar"), icon: <SectorIcon id="drawing" /> },
         { value: t("quote.q4.no", "Não, preciso de apoio no projeto"), hint: t("quote.q4.no.hint", "Desenvolvemos conforme a aplicação"), icon: <SectorIcon id="help" /> },
@@ -508,22 +708,31 @@ export function QuoteBuilder({
   };
   const wa = `https://wa.me/${company.whatsapp}?text=${encodeURIComponent(message)}`;
   const mail = `mailto:${company.email}?subject=${encodeURIComponent("Solicitação de orçamento — " + (quote.type || "Usibar"))}&body=${encodeURIComponent(message)}`;
-  const labels = [t("quote.s1", "Produto"), t("quote.s2", "Aplicação"), t("quote.s3", "Quantidade"), t("quote.s4", "Desenho"), t("quote.s5", "Enviar")];
+  const stepDefs = [
+    ["quote.s1", "Produto"],
+    ["quote.s2", "Aplicação"],
+    ["quote.s3", "Quantidade"],
+    ["quote.s4", "Desenho"],
+    ["quote.s5", "Enviar"],
+  ] as const;
+  const labels = stepDefs.map(([k, d]) => t(k, d));
   const current = steps[step];
+  const editing = useEditing();
+  const hidden = useHidden();
 
   return (
     <section className="quote" id="orcamento" data-tone="dark" aria-labelledby="quote-title">
       <div className="quote-head">
-        <span className="eyebrow">
-          {num} — <T k="quote.eyebrow" d="ORÇAMENTO" label="Orçamento — rótulo" />
-        </span>
-        <h2 id="quote-title">
-          <T k="quote.title.1" d="Seu orçamento" label="Orçamento — título" />
-          <br />
-          <em>
-            <T k="quote.title.2" d="em quatro respostas." label="Orçamento — título (destaque)" />
-          </em>
-        </h2>
+        <SectionEyebrow num={num} numKey="quote.num" eyebrowKey="quote.eyebrow" defaultLabel="ORÇAMENTO" sectionLabel="Orçamento" />
+        <SectionHeading
+          id="quote-title"
+          k1="quote.title.1"
+          d1="Seu orçamento"
+          l1="Orçamento — título"
+          k2="quote.title.2"
+          d2="em quatro respostas."
+          l2="Orçamento — título (destaque)"
+        />
         <Removable k="quote.intro" label="Orçamento — introdução" block>
           <p>
             <T
@@ -538,13 +747,15 @@ export function QuoteBuilder({
       <div className="quote-body">
         <div className="wizard" data-tone="light">
           <ol className="wizard-progress" aria-label="Etapas do orçamento">
-            {labels.map((l, i) => {
+            {stepDefs.map(([sk, sd], i) => {
               const done = i < last ? !!quote[steps[i].key] : false;
               return (
-                <li key={i} className={(i === step ? "now " : "") + (done ? "done" : "")}>
+                <li key={sk} className={(i === step ? "now " : "") + (done ? "done" : "")}>
                   <button onClick={() => go(i)} aria-current={i === step ? "step" : undefined}>
                     <b>{done && i !== step ? "✓" : i + 1}</b>
-                    <span>{l}</span>
+                    <span>
+                      <T k={sk} d={sd} label={`Orçamento — aba ${i + 1}`} />
+                    </span>
                   </button>
                 </li>
               );
@@ -557,7 +768,7 @@ export function QuoteBuilder({
                   <span className="tiny-mono">
                     {step + 1} / {last}
                   </span>
-                  {current.title}
+                  <T k={current.qk} d={current.defaultTitle} label={`Orçamento — pergunta ${step + 1}`} />
                 </h3>
                 {step === 0 && refs.length > 0 && (
                   <p className="wizard-refs">
@@ -588,13 +799,17 @@ export function QuoteBuilder({
                 </div>
                 <div className="wizard-nav">
                   {step > 0 && (
-                    <button onClick={() => go(step - 1)}>
-                      ← <T k="quote.back" d="Voltar" label="Orçamento — voltar" />
-                    </button>
+                    <Removable k="quote.back" label="Orçamento — voltar">
+                      <button onClick={() => go(step - 1)}>
+                        ← <T k="quote.back" d="Voltar" label="Orçamento — voltar" />
+                      </button>
+                    </Removable>
                   )}
-                  <button className="skip" onClick={() => go(step + 1)}>
-                    <T k="quote.skip" d="Pular esta pergunta" label="Orçamento — pular" /> →
-                  </button>
+                  <Removable k="quote.skip" label="Orçamento — pular" className="skip-slot">
+                    <button className="skip" onClick={() => go(step + 1)}>
+                      <T k="quote.skip" d="Pular esta pergunta" label="Orçamento — pular" /> →
+                    </button>
+                  </Removable>
                 </div>
               </>
             ) : (
@@ -616,44 +831,58 @@ export function QuoteBuilder({
                     </div>
                   ))}
                 </dl>
-                <div className="quote-fields">
-                  <label>
-                    <span>
-                      <T k="quote.name" d="Seu nome e empresa (opcional)" label="Orçamento — campo nome" />
-                    </span>
-                    <input value={quote.name} maxLength={120} autoComplete="organization" onChange={(e) => setQuote({ ...quote, name: e.target.value })} />
-                  </label>
-                  <label>
-                    <span>
-                      <T k="quote.details" d="Detalhes da aplicação (opcional)" label="Orçamento — campo detalhes" />
-                    </span>
-                    <textarea
-                      rows={3}
-                      maxLength={800}
-                      value={quote.details}
-                      placeholder={t("quote.details.ph", "Pressão de trabalho, curso, diâmetro, fixação, prazo…")}
-                      onChange={(e) => setQuote({ ...quote, details: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className="quote-send">
-                  <a className="send-wa" href={wa} target="_blank" rel="noreferrer" onClick={() => setSent(true)}>
-                    <Glyph name="whatsapp" />
-                    <T k="quote.send.wa" d="Enviar pelo WhatsApp" label="Orçamento — botão WhatsApp" />
-                    <Arrow />
-                  </a>
-                  <a className="send-mail" href={mail} onClick={() => setSent(true)}>
-                    <Glyph name="mail" />
-                    <T k="quote.send.mail" d="Enviar por e-mail" label="Orçamento — botão e-mail" />
-                    <Arrow />
-                  </a>
-                </div>
-                <details className="quote-preview">
-                  <summary>
-                    <T k="quote.preview" d="Ver a mensagem que será enviada" label="Orçamento — prévia" />
-                  </summary>
-                  <pre>{message}</pre>
-                </details>
+                {(editing || !hidden.includes("quote.field.name") || !hidden.includes("quote.field.details")) && (
+                  <div className="quote-fields">
+                    <Removable k="quote.field.name" label="Orçamento — campo nome" block>
+                      <label>
+                        <span>
+                          <T k="quote.name" d="Seu nome e empresa (opcional)" label="Orçamento — campo nome" />
+                        </span>
+                        <input value={quote.name} maxLength={120} autoComplete="organization" onChange={(e) => setQuote({ ...quote, name: e.target.value })} />
+                      </label>
+                    </Removable>
+                    <Removable k="quote.field.details" label="Orçamento — campo detalhes" block>
+                      <label>
+                        <span>
+                          <T k="quote.details" d="Detalhes da aplicação (opcional)" label="Orçamento — campo detalhes" />
+                        </span>
+                        <textarea
+                          rows={3}
+                          maxLength={800}
+                          value={quote.details}
+                          placeholder={t("quote.details.ph", "Pressão de trabalho, curso, diâmetro, fixação, prazo…")}
+                          onChange={(e) => setQuote({ ...quote, details: e.target.value })}
+                        />
+                      </label>
+                    </Removable>
+                  </div>
+                )}
+                {(editing || !hidden.includes("quote.send.wa") || !hidden.includes("quote.send.mail")) && (
+                  <div className="quote-send">
+                    <Removable k="quote.send.wa" label="Orçamento — botão WhatsApp" block>
+                      <a className="send-wa" href={wa} target="_blank" rel="noreferrer" onClick={() => setSent(true)}>
+                        <Glyph name="whatsapp" />
+                        <T k="quote.send.wa" d="Enviar pelo WhatsApp" label="Orçamento — botão WhatsApp" />
+                        <Arrow />
+                      </a>
+                    </Removable>
+                    <Removable k="quote.send.mail" label="Orçamento — botão e-mail" block>
+                      <a className="send-mail" href={mail} onClick={() => setSent(true)}>
+                        <Glyph name="mail" />
+                        <T k="quote.send.mail" d="Enviar por e-mail" label="Orçamento — botão e-mail" />
+                        <Arrow />
+                      </a>
+                    </Removable>
+                  </div>
+                )}
+                <Removable k="quote.preview" label="Orçamento — prévia" block>
+                  <details className="quote-preview">
+                    <summary>
+                      <T k="quote.preview" d="Ver a mensagem que será enviada" label="Orçamento — prévia" />
+                    </summary>
+                    <pre>{message}</pre>
+                  </details>
+                </Removable>
                 {sent && (
                   <p className="quote-note" role="status">
                     <T k="quote.sent" d="Mensagem aberta no aplicativo. Se tiver o desenho, anexe-o na conversa." label="Orçamento — após enviar" />
@@ -663,68 +892,112 @@ export function QuoteBuilder({
             )}
           </div>
         </div>
-        <ContactCard company={company} />
+        <Removable k="quote.contact" label="Orçamento — cartão de contato" block>
+          <ContactCard company={company} />
+        </Removable>
       </div>
     </section>
   );
 }
 
 export function ContactCard({ company }: { company: Company }) {
+  const editing = useEditing();
+  const hidden = useHidden();
+  const addrLine2 = [company.city, company.zip ? `CEP ${company.zip}` : ""].filter(Boolean).join(" · ");
+  const hasRows =
+    editing ||
+    !hidden.includes("contact.whatsapp") ||
+    !hidden.includes("contact.phone.row") ||
+    !hidden.includes("contact.email.row") ||
+    !hidden.includes("contact.address.row");
+  if (!editing && hidden.includes("contact.title") && !hasRows && hidden.includes("contact.socials")) return null;
   return (
     <aside className="contact-card" aria-labelledby="contact-title">
-      <span className="tiny-mono" id="contact-title">
-        <T k="contact.title" d="PREFERE FALAR DIRETO?" label="Contato — título" />
-      </span>
-      <ul className="contact-list">
-        <li>
-          <a href={`https://wa.me/${company.whatsapp}`} target="_blank" rel="noreferrer">
-            <Glyph name="whatsapp" />
-            <span>
-              <small>WhatsApp</small>
-              {company.phoneDisplay}
-            </span>
-          </a>
-        </li>
-        <li>
-          <a href={`tel:+${company.whatsapp}`}>
-            <Glyph name="phone" />
-            <span>
-              <small>
-                <T k="contact.phone" d="Telefone" label="Contato — telefone" />
-              </small>
-              {company.phoneDisplay}
-            </span>
-          </a>
-        </li>
-        <li>
-          <a href={`mailto:${company.email}`}>
-            <Glyph name="mail" />
-            <span>
-              <small>E-mail</small>
-              {company.email}
-            </span>
-          </a>
-        </li>
-        <li>
-          <a href={mapsUrl(company)} target="_blank" rel="noreferrer">
-            <Glyph name="pin" />
-            <span>
-              <small>
-                <T k="contact.address" d="Endereço · como chegar" label="Contato — endereço" />
-              </small>
-              {company.address}
-              <br />
-              {company.city} · CEP {company.zip}
-            </span>
-          </a>
-        </li>
-      </ul>
-      <SocialLinks company={company} />
+      <Removable k="contact.title" label="Contato — título" block>
+        <span className="tiny-mono" id="contact-title">
+          <T k="contact.title" d="PREFERE FALAR DIRETO?" label="Contato — título" />
+        </span>
+      </Removable>
+      {hasRows && (
+        <ul className="contact-list">
+          {(editing || !hidden.includes("contact.whatsapp")) && (
+            <li>
+              <Removable k="contact.whatsapp" label="Contato — WhatsApp" block>
+                <a href={`https://wa.me/${company.whatsapp}`} target="_blank" rel="noreferrer">
+                  <Glyph name="whatsapp" />
+                  <span>
+                    <small>
+                      <T k="contact.whatsapp.label" d="WhatsApp" label="Contato — rótulo WhatsApp" />
+                    </small>
+                    <T k="contact.whatsapp.value" d={company.phoneDisplay ?? ""} label="Contato — número WhatsApp" />
+                  </span>
+                </a>
+              </Removable>
+            </li>
+          )}
+          {(editing || !hidden.includes("contact.phone.row")) && (
+            <li>
+              <Removable k="contact.phone.row" label="Contato — telefone" block>
+                <a href={`tel:+${company.whatsapp}`}>
+                  <Glyph name="phone" />
+                  <span>
+                    <small>
+                      <T k="contact.phone" d="Telefone" label="Contato — rótulo telefone" />
+                    </small>
+                    <T k="contact.phone.value" d={company.phoneDisplay ?? ""} label="Contato — número telefone" />
+                  </span>
+                </a>
+              </Removable>
+            </li>
+          )}
+          {(editing || !hidden.includes("contact.email.row")) && (
+            <li>
+              <Removable k="contact.email.row" label="Contato — e-mail" block>
+                <a href={`mailto:${company.email}`}>
+                  <Glyph name="mail" />
+                  <span>
+                    <small>
+                      <T k="contact.email.label" d="E-mail" label="Contato — rótulo e-mail" />
+                    </small>
+                    <T k="contact.email.value" d={company.email ?? ""} label="Contato — e-mail" />
+                  </span>
+                </a>
+              </Removable>
+            </li>
+          )}
+          {(editing || !hidden.includes("contact.address.row")) && (
+            <li>
+              <Removable k="contact.address.row" label="Contato — bloco de endereço" block>
+                <a href={mapsUrl(company)} target="_blank" rel="noreferrer">
+                  <Glyph name="pin" />
+                  <span>
+                    <small>
+                      <T k="contact.address" d="Endereço · como chegar" label="Contato — rótulo endereço" />
+                    </small>
+                    <Removable k="contact.address.line1" label="Contato — rua e número">
+                      <T k="contact.address.line1" d={company.address ?? ""} label="Contato — rua e número" />
+                    </Removable>
+                    {!hidden.includes("contact.address.line1") && !hidden.includes("contact.address.line2") && <br />}
+                    <Removable k="contact.address.line2" label="Contato — cidade e CEP">
+                      <T k="contact.address.line2" d={addrLine2} label="Contato — cidade e CEP" />
+                    </Removable>
+                  </span>
+                </a>
+              </Removable>
+            </li>
+          )}
+        </ul>
+      )}
+      <Removable k="contact.socials" label="Contato — redes sociais" block>
+        <SocialLinks company={company} />
+      </Removable>
     </aside>
   );
 }
 
 export function SiteFooter({ company, logged, onEdit, nav }: { company: Company; logged: boolean; onEdit: () => void; nav: [string, string][] }) {
+  const hidden = useHidden();
+  const addrLine2 = [company.city, company.zip ? `CEP ${company.zip}` : ""].filter(Boolean).join(" · ");
   return (
     <footer className="site-footer" data-tone="dark">
       <div className="footer-brand">
@@ -736,49 +1009,69 @@ export function SiteFooter({ company, logged, onEdit, nav }: { company: Company;
             <T k="footer.motto" d={company.motto ?? company.Tagline ?? ""} label="Rodapé — lema" />
           </p>
         </Removable>
-        <SocialLinks company={company} />
+        <Removable k="footer.socials" label="Rodapé — redes sociais" block>
+          <SocialLinks company={company} />
+        </Removable>
       </div>
-      <nav aria-label="Rodapé">
-        <span className="tiny-mono">
-          <T k="footer.nav" d="NAVEGAÇÃO" label="Rodapé — navegação" />
-        </span>
-        {nav.map(([href, label]) => (
-          <a key={href} href={href}>
-            {label}
-          </a>
-        ))}
-      </nav>
-      <div>
-        <span className="tiny-mono">
-          <T k="footer.contact" d="CONTATO" label="Rodapé — contato" />
-        </span>
-        <a href={`https://wa.me/${company.whatsapp}`} target="_blank" rel="noreferrer" className="with-glyph">
-          <Glyph name="whatsapp" /> {company.phoneDisplay}
-        </a>
-        <a href={`mailto:${company.email}`} className="with-glyph">
-          <Glyph name="mail" /> {company.email}
-        </a>
-      </div>
-      <div>
-        <span className="tiny-mono">
-          <T k="footer.address" d="ENDEREÇO" label="Rodapé — endereço" />
-        </span>
-        <a href={mapsUrl(company)} target="_blank" rel="noreferrer" className="with-glyph">
-          <Glyph name="pin" />
-          <span>
-            {company.address}
-            <br />
-            {company.city} · CEP {company.zip}
+      <Removable k="footer.nav.col" label="Rodapé — coluna navegação" block>
+        <nav aria-label="Rodapé">
+          <span className="tiny-mono">
+            <T k="footer.nav" d="NAVEGAÇÃO" label="Rodapé — navegação" />
           </span>
-        </a>
-      </div>
+          {nav.map(([href, label]) => (
+            <a key={href} href={href}>
+              {label}
+            </a>
+          ))}
+        </nav>
+      </Removable>
+      <Removable k="footer.contact.col" label="Rodapé — coluna contato" block>
+        <div className="footer-col">
+          <span className="tiny-mono">
+            <T k="footer.contact" d="CONTATO" label="Rodapé — contato" />
+          </span>
+          <Removable k="footer.whatsapp" label="Rodapé — WhatsApp" block>
+            <a href={`https://wa.me/${company.whatsapp}`} target="_blank" rel="noreferrer" className="with-glyph">
+              <Glyph name="whatsapp" /> <T k="footer.whatsapp" d={company.phoneDisplay ?? ""} label="Rodapé — WhatsApp" />
+            </a>
+          </Removable>
+          <Removable k="footer.email" label="Rodapé — e-mail" block>
+            <a href={`mailto:${company.email}`} className="with-glyph">
+              <Glyph name="mail" /> <T k="footer.email" d={company.email ?? ""} label="Rodapé — e-mail" />
+            </a>
+          </Removable>
+        </div>
+      </Removable>
+      <Removable k="footer.address.col" label="Rodapé — coluna endereço" block>
+        <div className="footer-col">
+          <span className="tiny-mono">
+            <T k="footer.address" d="ENDEREÇO" label="Rodapé — endereço" />
+          </span>
+          <a href={mapsUrl(company)} target="_blank" rel="noreferrer" className="with-glyph">
+            <Glyph name="pin" />
+            <span>
+              <Removable k="footer.address.line1" label="Rodapé — rua e número">
+                <T k="footer.address.line1" d={company.address ?? ""} label="Rodapé — rua e número" />
+              </Removable>
+              {!hidden.includes("footer.address.line1") && !hidden.includes("footer.address.line2") && <br />}
+              <Removable k="footer.address.line2" label="Rodapé — cidade e CEP">
+                <T k="footer.address.line2" d={addrLine2} label="Rodapé — cidade e CEP" />
+              </Removable>
+            </span>
+          </a>
+        </div>
+      </Removable>
       <div className="footer-bottom">
-        <span>
-          © {new Date().getFullYear()} {company.name}
-        </span>
-        <span>
-          <T k="footer.tagline" d="CILINDROS · BLOCOS HIDRÁULICOS · USINAGEM CNC" label="Rodapé — linha" />
-        </span>
+        <Removable k="footer.copyright" label="Rodapé — direitos autorais">
+          <span>
+            <T k="footer.copyright" d={`© ${new Date().getFullYear()} ${company.name}`} label="Rodapé — direitos autorais" />
+          </span>
+        </Removable>
+        <Removable k="footer.tagline" label="Rodapé — linha">
+          <span>
+            <T k="footer.tagline" d="CILINDROS · BLOCOS HIDRÁULICOS · USINAGEM CNC" label="Rodapé — linha" />
+          </span>
+        </Removable>
         {logged ? <button onClick={onEdit}>Editar site ↗</button> : <a href="/admin">Área administrativa ↗</a>}
         <a className="footer-credit" href="https://nodenhub.com.br" target="_blank" rel="noopener">
           Desenvolvido por Noden
