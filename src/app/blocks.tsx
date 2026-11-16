@@ -264,7 +264,7 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
             </OptionalSlot>
           </div>
           <figure className="tpl-figure">
-            <img src={String(d.imageUrl ?? "")} alt="" loading="lazy" />
+            <img src={String(d.imageUrl ?? "")} alt={String(d.title ?? d.eyebrow ?? "")} loading="lazy" />
             <span className="image-bracket tl" />
             <span className="image-bracket br" />
             <ImageSwap src={String(d.imageUrl ?? "")} label="foto" onChange={(url) => update(block.id, (x) => ({ ...x, imageUrl: url }), "Foto da seção")} />
@@ -781,12 +781,13 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
         const setItem = (i: number, p: Partial<UItem>, label: string) =>
           patch(b.id, { items: items.map((x, j) => (j === i ? Object.fromEntries(Object.entries({ ...x, ...p }).filter(([, v]) => v !== undefined && !(Array.isArray(v) && !v.length))) : x)) }, label);
         return (
+          <>
           <ul className="ub-features">
             {items.map((it, i) => (
-              <li key={i}>
+              <li key={i} data-pos-lock="">
                 <div className="ub-card-head">
                   {it.logo ? (
-                    <img className="ub-logo" src={it.logo} alt="" loading="lazy" />
+                    <img className="ub-logo" src={it.logo} alt={`Logo ${it.title ?? ""}`.trim()} loading="lazy" />
                   ) : (
                     <button type="button" className="ub-icon" disabled={!editing} onClick={() => setIconFor(iconFor === `${b.id}:${i}` ? null : `${b.id}:${i}`)} aria-label="Trocar ícone">
                       <Icon name={it.icon ?? "info"} />
@@ -830,14 +831,16 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
                 )}
               </li>
             ))}
-            {editing && items.length < MAX_FEATURES && (
-              <li className="ub-add-item">
-                <button type="button" onClick={() => patch(b.id, { items: [...items, { icon: items.at(-1)?.icon ?? "check", title: "Novo destaque", text: "Descreva." }] }, "Destaque adicionado")}>
-                  + Destaque
-                </button>
-              </li>
-            )}
           </ul>
+          {/* Outside the grid, so the cards keep the same columns while editing as for visitors. */}
+          {editing && items.length < MAX_FEATURES && (
+            <div className="ub-add-item">
+              <button type="button" onClick={() => patch(b.id, { items: [...items, { icon: items.at(-1)?.icon ?? "check", title: "Novo destaque", text: "Descreva." }] }, "Destaque adicionado")}>
+                + Destaque
+              </button>
+            </div>
+          )}
+          </>
         );
       }
       case "contacts":
@@ -879,9 +882,10 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
         );
       case "stats":
         return (
+          <>
           <ul className="tpl-stat-list ub-stats">
             {(b.items ?? []).map((it, i) => (
-              <li key={i}>
+              <li key={i} data-pos-lock="">
                 <strong>{item(b, i, "value", `Número ${i + 1}`)}</strong>
                 <span>{item(b, i, "label", `Legenda ${i + 1}`)}</span>
                 {editing && (b.items?.length ?? 0) > 1 && (
@@ -891,14 +895,15 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
                 )}
               </li>
             ))}
-            {editing && (b.items?.length ?? 0) < 6 && (
-              <li className="tpl-add-item">
-                <button type="button" onClick={() => patch(b.id, { items: [...(b.items ?? []), { value: "00", label: "Descreva este número" }] }, "Número adicionado")}>
-                  + Número
-                </button>
-              </li>
-            )}
           </ul>
+          {editing && (b.items?.length ?? 0) < 6 && (
+            <div className="tpl-add-item ub-add-item">
+              <button type="button" onClick={() => patch(b.id, { items: [...(b.items ?? []), { value: "00", label: "Descreva este número" }] }, "Número adicionado")}>
+                + Número
+              </button>
+            </div>
+          )}
+          </>
         );
       case "divider":
         return <hr className="ub-divider" />;
