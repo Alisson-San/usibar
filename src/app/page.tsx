@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
@@ -172,6 +172,43 @@ export default function UsibarHome() {
     loaded = !!content;
   const nav = content ? buildNav(content) : [];
   const navKey = nav.map((n) => n.id).join("|");
+  // Header menu: every visible section, in page order (the quote has its own button unless that
+  // button was removed). Whatever does not fit goes behind "+N", which opens the index.
+  const headerNav = nav.filter((n) => n.id !== "orcamento" || (content?.hidden ?? []).includes("header.cta"));
+  const headerKey = headerNav.map((n) => `${n.id}:${n.label}`).join("|");
+  const navRef = useRef<HTMLElement>(null);
+  const [navFit, setNavFit] = useState(Infinity);
+  useLayoutEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const measure = () => {
+      const links = [...el.querySelectorAll<HTMLElement>("a[data-nav]")];
+      const more = el.querySelector<HTMLElement>(".nav-more");
+      const avail = el.clientWidth;
+      if (!avail || !links.length) return;
+      const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+      const widths = links.map((a) => a.offsetWidth);
+      const moreW = more?.offsetWidth ?? 0;
+      let fit = 0;
+      for (let k = links.length; k >= 0; k--) {
+        const used = widths.slice(0, k).reduce((a, w) => a + w, 0) + gap * Math.max(0, k - 1) + (k < links.length ? (k ? gap : 0) + moreW : 0);
+        if (used <= avail + 0.5) {
+          fit = k;
+          break;
+        }
+      }
+      setNavFit((prev) => (prev === fit ? prev : fit));
+    };
+    measure();
+    document.fonts?.ready.then(measure);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [headerKey, loaded]);
+  // The cylinder labels fly from the header slots: recompute their start when the slots change.
+  useEffect(() => {
+    ScrollTrigger.refresh();
+  }, [navFit]);
 
   useEffect(() => {
     fetch("/api/company", { cache: "no-store" })
@@ -548,7 +585,7 @@ export default function UsibarHome() {
           ),
         );
         dock
-          .to(".site-header .header-cta-slot, .site-header .header-contact, .site-header .menu-toggle", { autoAlpha: 0, duration: 0.25 }, 0)
+          .to(".site-header .header-cta-slot, .site-header .header-contact, .site-header .menu-toggle, .site-header .nav-more", { autoAlpha: 0, duration: 0.25 }, 0)
           .to(".site-header .header-bg", { opacity: 0, duration: 0.4 }, 0.1)
           .to(".site-header .brand", { scale: 0.82, transformOrigin: "0% 50%", duration: 0.6, ease: "power2.inOut" }, 0.2)
           .to(".site-header .brand-plate", { opacity: 1, duration: 0.3 }, 0.1)
@@ -1103,16 +1140,35 @@ export default function UsibarHome() {
             <span className="brand-plate" aria-hidden="true" />
             <LogoFull className="brand-logo" />
           </a>
-          <nav className="main-nav" aria-label="Navegação principal">
-            {nav
-              .filter((n) => n.id !== "orcamento")
-              .slice(0, 5)
-              .map((n) => (
-                <a key={n.id} href={`#${n.id}`} data-slot={n.id} aria-current={section === n.id ? "location" : undefined}>
+          <nav className="main-nav" aria-label="Navegação principal" ref={navRef}>
+            {headerNav.map((n, i) => {
+              const over = i >= navFit;
+              return (
+                <a
+                  key={n.id}
+                  href={`#${n.id}`}
+                  data-nav=""
+                  data-slot={over ? undefined : n.id}
+                  className={over ? "nav-over" : undefined}
+                  aria-hidden={over || undefined}
+                  tabIndex={over ? -1 : undefined}
+                  aria-current={section === n.id ? "location" : undefined}
+                >
                   <small>{n.n}</small>
                   {n.label}
                 </a>
-              ))}
+              );
+            })}
+            <button
+              type="button"
+              className={"nav-more" + (navFit < headerNav.length ? "" : " nav-over")}
+              aria-hidden={navFit >= headerNav.length || undefined}
+              tabIndex={navFit < headerNav.length ? undefined : -1}
+              title="Ver todas as seções no índice"
+              onClick={() => setMenu(true)}
+            >
+              +{Math.max(1, headerNav.length - Math.min(navFit, headerNav.length))}
+            </button>
           </nav>
           <Removable k="header.cta" label="Cabeçalho — botão" className="header-cta-slot">
             <a className="header-contact" href="#orcamento" aria-current={section === "orcamento" ? "location" : undefined}>
