@@ -26,7 +26,7 @@ export const FIELD_ACTIONS = {
   custom: "Siga a instrução do administrador.",
 };
 
-const LIMITS = { text: 4000, label: 120, instruction: 500, fields: 200, total: 40000 };
+const LIMITS = { text: 4000, label: 120, instruction: 500, fields: 400, total: 40000 };
 const str = (v, max) => typeof v === "string" && v.length <= max;
 const keyOk = (k) => typeof k === "string" && /^[a-z0-9][a-z0-9._-]{0,79}$/i.test(k);
 
@@ -37,7 +37,7 @@ export function validateAiRequest(body) {
   if (body.action === "review") {
     const fields = body.fields;
     if (!Array.isArray(fields) || fields.length === 0 || fields.length > LIMITS.fields)
-      return { ok: false, error: "Envie entre 1 e 200 textos para revisar." };
+      return { ok: false, error: `Envie entre 1 e ${LIMITS.fields} textos para revisar.` };
     let total = 0;
     for (const f of fields) {
       if (!f || !keyOk(f.key) || !str(f.label, LIMITS.label) || !str(f.text, LIMITS.text))
@@ -258,7 +258,7 @@ export function validateChatRequest(body) {
         typeof b.hidden === "boolean" &&
         list(b.blocks ?? [], 40, (x) => shortStr(x.id, 16) && BLOCK_KINDS.includes(x.kind) && shortStr(x.text ?? "", 200)),
     ) &&
-    list(site.removables ?? [], 200, (r) => shortStr(r.key, 80) && shortStr(r.label, 120) && typeof r.hidden === "boolean") &&
+    list(site.removables ?? [], 500, (r) => shortStr(r.key, 80) && shortStr(r.label, 120) && typeof r.hidden === "boolean") &&
     (site.notice === undefined || (typeof site.notice === "object" && JSON.stringify(site.notice).length <= 2000)) &&
     list(
       site.products,
@@ -304,7 +304,10 @@ export function siteState(site, texts) {
   site.sections.forEach((b, i) => {
     const kind = BUILTIN_TYPES.includes(b.type) ? "fixa" : `modelo ${TYPE_NAMES[b.type]}`;
     lines.push(`${i + 1}. [${b.id}] ${b.name} (${kind}${b.hidden ? ", oculta" : ""})`);
-    (b.blocks ?? []).forEach((x, j) => lines.push(`   bloco ${j + 1}. [${x.id}] ${BLOCK_NAMES[x.kind]}${x.text ? `: ${x.text}` : ""}`));
+    (b.blocks ?? []).forEach((x, j) => {
+      const cards = x.kind === "features" && x.items ? `: ${x.items.map((it) => `${it.title}${it.links?.length ? ` (${it.links.map((l) => l.type).join(", ")})` : ""}${it.logo ? " [com logo]" : ""}`).join(" · ")}` : "";
+      lines.push(`   bloco ${j + 1}. [${x.id}] ${BLOCK_NAMES[x.kind]}${x.text ? `: ${x.text}` : cards}`);
+    });
   });
   const missing = BUILTIN_TYPES.filter((t) => !site.sections.some((b) => b.type === t));
   if (missing.length) lines.push(`Seções fixas fora da página (podem ser recolocadas com add_section): ${missing.join(", ")}`);
@@ -366,6 +369,7 @@ export function chatSystemPrompt(facts, state) {
     "- Foto anexada sem instrução: descreva em uma frase o que vê e ofereça opções práticas (cadastrar como peça recortando o fundo, trocar foto do topo/solução/peça, ou criar galeria).",
     "- Ao criar uma seção nova pedida pelo administrador, use add_section (prefira type blocks para seções ricas sob medida e defina visible: true quando o administrador pedir para criar/colocar no site). Textos e botões das seções fixas podem ser ocultados/recolocados com set_element_visibility.",
     "- Soluções da seção 1, Segmentos, Pilares e Processo: use add_service/update_service/remove_service, add_sector/update_sector/remove_sector, add_pillar/update_pillar/remove_pillar e update_process_step para gerenciar esses itens diretamente.",
+    "- Representantes, filiais, equipe e afins: use um bloco features (um cartão por pessoa ou empresa: title = nome, text = região ou cargo) e preencha links de cada cartão com os contatos (whatsapp, email, telefone, site, instagram); eles aparecem como ícones clicáveis. Para uma linha de contatos solta, use o bloco contacts. Ao alterar itens de um bloco features com update_block, envie TODOS os cartões (os que não mudam também), com seus contatos; as logos são mantidas e só o administrador as envia, pelo botão “+ Logo” de cada cartão.",
     "- Avisos como férias coletivas ou feriados: use set_notice com período, data de retorno e contato (WhatsApp/e-mail) no texto; datas no formato AAAA-MM-DD.",
     "- Para revisar todos os textos da página, chame review_texts. Para rolar até um item e destacá-lo, chame show_on_site.",
     "- Você não altera senhas nem contas de administradores e não publica nada fora do site. Explique com gentileza se pedirem.",

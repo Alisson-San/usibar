@@ -11,7 +11,7 @@ import {
   sceneTimeline,
   type SceneTimeline,
 } from "./EngineeringScene";
-import { Editable, Removable, T } from "./copy";
+import { Editable, Removable, SectionEyebrow, T, useHidden } from "./copy";
 
 export type Step = { label: string; title: string; copy: string };
 
@@ -66,7 +66,9 @@ export function ProcessSection({
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
+  const hidden = useHidden();
   const textKey = steps.map((s) => s.label + s.title + s.copy).join("|");
+  const hiddenKey = hidden.filter((k) => k.startsWith("process.")).join("|");
 
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
@@ -78,7 +80,7 @@ export function ProcessSection({
       },
       (c) => {
         let last = -1;
-        const fills = Array.from(rail.current!.querySelectorAll<HTMLElement>("i"));
+        const fills = Array.from(rail.current?.querySelectorAll<HTMLElement>("i") ?? []);
         const s = sceneTimeline(frame.current!, (t, st) => {
           const ends = [...s.starts.slice(1), s.tl.duration()];
           fills.forEach((f, i) =>
@@ -120,7 +122,7 @@ export function ProcessSection({
     ScrollTrigger.sort();
     ScrollTrigger.refresh();
     return () => mm.revert();
-  }, [compact, editing, textKey]);
+  }, [compact, editing, textKey, hiddenKey]);
 
   function goStage(i: number) {
     const cur = scene.current;
@@ -149,14 +151,16 @@ export function ProcessSection({
   return (
     <div className="pin-host" ref={spacer}>
       <section id="processo" className="manufacturing" ref={section}>
-        <div className="process-top eyebrow">
-          <span>
-            {num} — <T k="process.eyebrow" d="DO DESENHO À PEÇA" label="Processo — rótulo" />
-          </span>
-          <a href="#pecas" className="skip-scene">
-            <T k="process.skip" d="Pular animação" label="Processo — pular" /> ↓
-          </a>
-        </div>
+        {(editing || !hidden.includes("process.num") || !hidden.includes("process.eyebrow") || !hidden.includes("process.skip")) && (
+          <div className="process-top eyebrow">
+            <SectionEyebrow num={num} numKey="process.num" eyebrowKey="process.eyebrow" defaultLabel="DO DESENHO À PEÇA" sectionLabel="Processo" className="" />
+            <Removable k="process.skip" label="Processo — pular">
+              <a href="#pecas" className="skip-scene">
+                <T k="process.skip" d="Pular animação" label="Processo — pular" /> ↓
+              </a>
+            </Removable>
+          </div>
+        )}
         <span className="stage-mark" aria-hidden="true" key={stage}>
           0{stage + 1}
         </span>
@@ -171,95 +175,142 @@ export function ProcessSection({
           <EngineeringScene compact={compact} />
           <div className="note-stack">
             <article className="note note-drawing" aria-label={`Etapa 1 de 3: ${steps[0].label}`}>
-              <div className="pos tb-head" style={at(TITLE_BLOCK.x, TITLE_BLOCK.y, TITLE_BLOCK.w, TITLE_BLOCK.head)}>
-                <span>
-                  <T k="process.tb.title" d="USIBAR · DESENHO TÉCNICO" label="Carimbo — título" />
-                </span>
-                <span>
-                  <T k="process.tb.sheet" d="FOLHA 01/03" label="Carimbo — folha" />
-                </span>
-              </div>
+              {(editing || !hidden.includes("process.tb.title") || !hidden.includes("process.tb.sheet")) && (
+                <div className="pos tb-head" style={at(TITLE_BLOCK.x, TITLE_BLOCK.y, TITLE_BLOCK.w, TITLE_BLOCK.head)}>
+                  <Removable k="process.tb.title" label="Carimbo — título">
+                    <span>
+                      <T k="process.tb.title" d="USIBAR · DESENHO TÉCNICO" label="Carimbo — título" />
+                    </span>
+                  </Removable>
+                  <Removable k="process.tb.sheet" label="Carimbo — folha">
+                    <span>
+                      <T k="process.tb.sheet" d="FOLHA 01/03" label="Carimbo — folha" />
+                    </span>
+                  </Removable>
+                </div>
+              )}
               <div className="pos tb-main" style={at(TITLE_BLOCK.x, TITLE_BLOCK.y + TITLE_BLOCK.head, TITLE_BLOCK.w, TITLE_BLOCK.h - TITLE_BLOCK.head - TITLE_BLOCK.foot)}>
-                <span className="note-label">{field(0, "label", "t", "rótulo")}</span>
-                <h3>{field(0, "title", "w", "título")}</h3>
-                <p>{field(0, "copy", "t", "texto")}</p>
+                <Removable k="process.0.label" label="Etapa 1 — rótulo" block>
+                  <span className="note-label">{field(0, "label", "t", "rótulo")}</span>
+                </Removable>
+                <Removable k="process.0.title" label="Etapa 1 — título" block>
+                  <h3>{field(0, "title", "w", "título")}</h3>
+                </Removable>
+                <Removable k="process.0.copy" label="Etapa 1 — texto" block>
+                  <p>{field(0, "copy", "t", "texto")}</p>
+                </Removable>
               </div>
-              <div className="pos tb-foot" style={at(TITLE_BLOCK.x, TITLE_BLOCK.y + TITLE_BLOCK.h - TITLE_BLOCK.foot, TITLE_BLOCK.w, TITLE_BLOCK.foot)}>
-                <span>
-                  <small>
-                    <T k="process.tb.scale" d="ESCALA" label="Carimbo — campo 1" />
-                  </small>
-                  <T k="process.tb.scale.v" d="1:5" label="Carimbo — valor 1" />
-                </span>
-                <span>
-                  <small>
-                    <T k="process.tb.unit" d="UNIDADE" label="Carimbo — campo 2" />
-                  </small>
-                  <T k="process.tb.unit.v" d="mm" label="Carimbo — valor 2" />
-                </span>
-                <span>
-                  <small>
-                    <T k="process.tb.rev" d="REVISÃO" label="Carimbo — campo 3" />
-                  </small>
-                  <T k="process.tb.rev.v" d="A" label="Carimbo — valor 3" />
-                </span>
-              </div>
+              {(editing || !hidden.includes("process.tb.scale.cell") || !hidden.includes("process.tb.unit.cell") || !hidden.includes("process.tb.rev.cell")) && (
+                <div className="pos tb-foot" style={at(TITLE_BLOCK.x, TITLE_BLOCK.y + TITLE_BLOCK.h - TITLE_BLOCK.foot, TITLE_BLOCK.w, TITLE_BLOCK.foot)}>
+                  <Removable k="process.tb.scale.cell" label="Carimbo — escala">
+                    <span>
+                      <small>
+                        <T k="process.tb.scale" d="ESCALA" label="Carimbo — campo 1" />
+                      </small>
+                      <T k="process.tb.scale.v" d="1:5" label="Carimbo — valor 1" />
+                    </span>
+                  </Removable>
+                  <Removable k="process.tb.unit.cell" label="Carimbo — unidade">
+                    <span>
+                      <small>
+                        <T k="process.tb.unit" d="UNIDADE" label="Carimbo — campo 2" />
+                      </small>
+                      <T k="process.tb.unit.v" d="mm" label="Carimbo — valor 2" />
+                    </span>
+                  </Removable>
+                  <Removable k="process.tb.rev.cell" label="Carimbo — revisão">
+                    <span>
+                      <small>
+                        <T k="process.tb.rev" d="REVISÃO" label="Carimbo — campo 3" />
+                      </small>
+                      <T k="process.tb.rev.v" d="A" label="Carimbo — valor 3" />
+                    </span>
+                  </Removable>
+                </div>
+              )}
             </article>
             <article className="note note-machine pos" style={at(740, 130, 420, 330)} aria-label={`Etapa 2 de 3: ${steps[1].label}`}>
-              <div className="cnc-head">
-                <span>
-                  <T k="process.cnc.title" d="CNC · G81 FURAÇÃO" label="Painel CNC — título" />
+              {(editing || !hidden.includes("process.cnc.title") || !hidden.includes("process.cnc.live")) && (
+                <div className="cnc-head">
+                  <Removable k="process.cnc.title" label="Painel CNC — título">
+                    <span>
+                      <T k="process.cnc.title" d="CNC · G81 FURAÇÃO" label="Painel CNC — título" />
+                    </span>
+                  </Removable>
+                  <Removable k="process.cnc.live" label="Painel CNC — estado">
+                    <span className="cnc-live">
+                      <T k="process.cnc.live" d="EM EXECUÇÃO" label="Painel CNC — estado" />
+                    </span>
+                  </Removable>
+                </div>
+              )}
+              <Removable k="process.cnc.dro" label="Painel CNC — coordenadas" block>
+                <dl className="cnc-dro">
+                  {["x", "y", "z"].map((a) => (
+                    <div key={a}>
+                      <dt>{a.toUpperCase()}</dt>
+                      <dd className={`dro-${a}`}>000.00</dd>
+                    </div>
+                  ))}
+                </dl>
+              </Removable>
+              <Removable k="process.1.label" label="Etapa 2 — rótulo" block>
+                <span className="note-label">
+                  <span aria-hidden="true">&gt; </span>
+                  {field(1, "label", "t", "rótulo")}
                 </span>
-                <span className="cnc-live">
-                  <T k="process.cnc.live" d="EM EXECUÇÃO" label="Painel CNC — estado" />
-                </span>
-              </div>
-              <dl className="cnc-dro">
-                {["x", "y", "z"].map((a) => (
-                  <div key={a}>
-                    <dt>{a.toUpperCase()}</dt>
-                    <dd className={`dro-${a}`}>000.00</dd>
-                  </div>
-                ))}
-              </dl>
-              <span className="note-label">
-                <span aria-hidden="true">&gt; </span>
-                {field(1, "label", "t", "rótulo")}
-              </span>
-              <h3>{field(1, "title", "w", "título")}</h3>
-              <p>
-                {field(1, "copy", "t", "texto")}
-                <span className="caret" aria-hidden="true" />
-              </p>
+              </Removable>
+              <Removable k="process.1.title" label="Etapa 2 — título" block>
+                <h3>{field(1, "title", "w", "título")}</h3>
+              </Removable>
+              <Removable k="process.1.copy" label="Etapa 2 — texto" block>
+                <p>
+                  {field(1, "copy", "t", "texto")}
+                  <span className="caret" aria-hidden="true" />
+                </p>
+              </Removable>
             </article>
             <article className="note note-force" aria-label={`Etapa 3 de 3: ${steps[2].label}`}>
               <div className="pos push" style={at(880, 150, 290)}>
-                <span className="note-label">{field(2, "label", "t", "rótulo")}</span>
-                <h3>{field(2, "title", "w", "título")}</h3>
+                <Removable k="process.2.label" label="Etapa 3 — rótulo" block>
+                  <span className="note-label">{field(2, "label", "t", "rótulo")}</span>
+                </Removable>
+                <Removable k="process.2.title" label="Etapa 3 — título" block>
+                  <h3>{field(2, "title", "w", "título")}</h3>
+                </Removable>
               </div>
-              <span className="pos stroke-label" style={at(ROD_EYE.from, ROD_EYE.y + 72, 200)}>
-                <T k="process.stroke" d="CURSO" label="Processo — cota" /> <span className="stroke-mm">000</span> mm
-              </span>
-              <p className="pos force-copy" style={at(120, 470, 470)}>
-                {field(2, "copy", "t", "texto")}
-              </p>
+              {(editing || !hidden.includes("process.stroke")) && (
+                <span className="pos stroke-label" style={at(ROD_EYE.from, ROD_EYE.y + 72, 200)}>
+                  <Removable k="process.stroke" label="Processo — cota de curso">
+                    <T k="process.stroke" d="CURSO" label="Processo — cota" /> <span className="stroke-mm">000</span>{" "}
+                    <T k="process.stroke.unit" d="mm" label="Processo — unidade da cota" />
+                  </Removable>
+                </span>
+              )}
+              <div className="pos force-copy" style={at(120, 470, 470)}>
+                <Removable k="process.2.copy" label="Etapa 3 — texto" block>
+                  <p>{field(2, "copy", "t", "texto")}</p>
+                </Removable>
+              </div>
             </article>
           </div>
         </div>
-        <div className="process-rail" ref={rail}>
-          {steps.map((step, i) => (
-            <button
-              key={i}
-              className={stage === i ? "active" : ""}
-              aria-current={stage === i ? "step" : undefined}
-              onClick={() => goStage(i)}
-            >
-              <span>0{i + 1}</span>
-              {step.label}
-              <i />
-            </button>
-          ))}
-        </div>
+        <Removable k="process.rail" label="Processo — barra de etapas" block>
+          <div className="process-rail" ref={rail}>
+            {steps.map((step, i) => (
+              <button
+                key={i}
+                className={stage === i ? "active" : ""}
+                aria-current={stage === i ? "step" : undefined}
+                onClick={() => goStage(i)}
+              >
+                <span>0{i + 1}</span>
+                {step.label}
+                <i />
+              </button>
+            ))}
+          </div>
+        </Removable>
         <Removable k="process.note" label="Processo — nota" block>
           <p className="process-footnote">
             <T k="process.note" d="Desenhos e mecanismos ilustrativos. Cada componente é desenvolvido conforme a aplicação." label="Processo — nota" />

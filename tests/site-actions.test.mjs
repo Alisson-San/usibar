@@ -148,6 +148,61 @@ test("blocks: each kind validated with its own fields", () => {
   assert.equal(validBlocks([ok[0], ok[0]], img), false, "duplicate ids");
 });
 
+test("cards with logo and contacts; standalone contacts block", async () => {
+  const { normalizeContact, contactHref, contactText, validContact } = await import("../src/lib/site-actions.mjs");
+  assert.equal(normalizeContact("whatsapp", "(54) 99123-4567"), "5554991234567");
+  assert.equal(contactHref({ type: "whatsapp", value: "5554991234567" }), "https://wa.me/5554991234567");
+  assert.equal(contactText({ type: "whatsapp", value: "5554991234567" }), "(54) 99123-4567");
+  assert.equal(normalizeContact("telefone", "54 3333-2222"), "5433332222");
+  assert.equal(contactHref({ type: "telefone", value: "5433332222" }), "tel:+555433332222");
+  assert.equal(normalizeContact("email", "Vendas@Rep.com.br"), "vendas@rep.com.br");
+  assert.equal(normalizeContact("email", "vendas@rep"), null);
+  assert.equal(normalizeContact("instagram", "https://www.instagram.com/rv.rep/?hl=pt"), "rv.rep");
+  assert.equal(normalizeContact("site", "rep.com.br"), "https://rep.com.br");
+  assert.equal(normalizeContact("site", "javascript:alert(1)"), null);
+  assert.equal(validContact({ type: "email", value: "VENDAS@rep.com.br" }), false, "only normalized values are stored");
+  assert.equal(validContact({ type: "site", value: "http://rep.com.br" }), false);
+  const card = { icon: "pessoas", title: "Fluid-Hydraulics", text: "Litoral/RS", logo: "/assets/logo.webp", links: [{ type: "whatsapp", value: "5554991234567" }, { type: "email", value: "a@b.com.br" }] };
+  const ok = [
+    { id: "r1", kind: "features", items: Array.from({ length: 12 }, () => card) },
+    { id: "r2", kind: "contacts", links: [{ type: "site", value: "https://rep.com.br" }], style: "list" },
+  ];
+  assert.equal(validBlocks(ok, img), true);
+  for (const bad of [
+    { id: "x", kind: "features", items: Array.from({ length: 13 }, () => card) },
+    { id: "x", kind: "features", items: [{ ...card, logo: "https://evil/x.png" }] },
+    { id: "x", kind: "features", items: [{ ...card, links: [{ type: "site", value: "javascript:alert(1)" }] }] },
+    { id: "x", kind: "features", items: [{ ...card, links: Array.from({ length: 7 }, () => card.links[0]) }] },
+    { id: "x", kind: "contacts", links: [] },
+    { id: "x", kind: "contacts", links: [{ type: "fax", value: "123456789" }] },
+    { id: "x", kind: "contacts", links: card.links, style: "ghost" },
+  ])
+    assert.equal(validBlocks([bad], img), false, JSON.stringify(bad));
+});
+
+test("assistant: contacts on cards are normalized and logos survive a card update", () => {
+  const blocks = [{ id: "f1", kind: "features", items: [{ icon: "pessoas", title: "Fluid", logo: "/assets/hero-bench.webp" }, { icon: "pessoas", title: "RV" }] }];
+  const free = { id: "rep1", type: "blocks", data: { nav: "Representantes", blocks } };
+  const c2 = { ...content, layout: [...content.layout, free] };
+  const site2 = { ...site, sections: [...site.sections, { id: "rep1", type: "blocks", name: "Representantes", hidden: false, blocks }] };
+  const [act] = acceptActions(
+    [{ name: "update_block", args: { section: "rep1", block: "f1", items: [{ title: "Fluid", text: "Litoral/RS", links: [{ type: "whatsapp", value: "(54) 99123-4567" }, { type: "email", value: "x@y" }] }, { title: "RV", links: [{ type: "instagram", value: "@rv.rep" }] }] } }],
+    site2,
+    texts,
+  ).actions;
+  assert.ok(act);
+  const r = applyAction(c2, act, ctx);
+  assert.equal(validData(r.content), true);
+  const items = r.content.layout.at(-1).data.blocks[0].items;
+  assert.deepEqual(items[0].links, [{ type: "whatsapp", value: "5554991234567" }], "bad e-mail dropped, number normalized");
+  assert.equal(items[0].logo, "/assets/hero-bench.webp", "logo kept");
+  assert.equal(items[0].icon, "pessoas", "icon kept when the assistant omits it");
+  assert.deepEqual(items[1].links, [{ type: "instagram", value: "rv.rep" }]);
+  const [add] = acceptActions([{ name: "add_block", args: { section: "rep1", kind: "contacts", style: "list", links: [{ type: "email", value: "vendas@usibar.com.br" }] } }], site2, texts).actions;
+  assert.equal(validData(applyAction(c2, add, ctx).content), true);
+  assert.equal(acceptActions([{ name: "add_block", args: { section: "rep1", kind: "contacts", links: [{ type: "email", value: "nada" }] } }], site2, texts).actions.length, 0);
+});
+
 test("notice: dates, icon and version checked; shown only inside its period", () => {
   const n = { enabled: true, icon: "ferias", title: "Férias coletivas", text: "De 22/12 a 05/01.", start: "2026-12-20", end: "2027-01-05", version: "v1" };
   assert.equal(validNotice(n), true);
@@ -245,4 +300,63 @@ test("assistant autonomy: multi-task batch, photo-less cadastros, structured CRU
   cur = applyAction(cur, resetPos, ctx).content;
   assert.deepEqual(cur.styles["hero.title.1"], { width: 88, align: "right" });
   assert.equal(validData(cur), true);
+});
+
+import { validateAiRequest } from "../src/lib/ai-rules.mjs";
+
+test("expanded removables, decoupled origin/service keys, zero-item lists and optional product fields stay valid", () => {
+  const removables = [
+    { key: "origin.caption", label: "Empresa — legenda da foto", hidden: false },
+    { key: "origin.city", label: "Empresa — cidade na foto", hidden: false },
+    { key: "origin.num", label: "Empresa — numeração", hidden: false },
+    { key: "origin.eyebrow", label: "Empresa — rótulo", hidden: false },
+    { key: "origin.p3", label: "Apresentação — parágrafo 3", hidden: false },
+    { key: "origin.years", label: "Empresa — anos de experiência", hidden: false },
+    { key: "service.cilindros.cta", label: "Solução 1 — botão orçar", hidden: false },
+    ...Array.from({ length: 240 }, (_, i) => ({ key: `extra.item.${i}`, label: `Campo ${i}`, hidden: i % 2 === 0 })),
+  ];
+  const manyTexts = Array.from({ length: 230 }, (_, i) => ({ key: `copy.k.${i}`, label: `Texto ${i}`, text: "Curto" }));
+  const chatCheck = validateAiRequest({
+    action: "chat",
+    messages: [{ role: "user", text: "remova Barão da legenda da foto da empresa" }],
+    site: {
+      ...site,
+      company: { phoneDisplay: content.company.phoneDisplay, whatsapp: content.company.whatsapp },
+      removables,
+      pillars: content.pillars.map(({ id, title, desc }) => ({ id, title, desc })),
+      services: content.services.map(({ id, title, lead, copy, category }) => ({ id, title, lead, copy, category })),
+    },
+    texts: manyTexts,
+  });
+  assert.equal(chatCheck.ok, true);
+
+  // Hiding origin.city independently of origin.caption + 240 other keys stays valid
+  const hiddenKeys = removables.filter((r) => r.hidden || r.key === "origin.city").map((r) => r.key);
+  assert.equal(
+    validData({
+      ...content,
+      hidden: hiddenKeys,
+      copy: { "origin.caption": "Usibar", "origin.city": "Barão/RS", "service.cilindros.cta": "Cotar cilindros" },
+      products: [{ ...content.products[0], specs: "", description: "" }],
+    }),
+    true,
+  );
+
+  // Removing every pillar and service down to zero is accepted by both AI actions and server validation
+  const siteWithAll = {
+    ...site,
+    pillars: content.pillars.map(({ id, title, desc }) => ({ id, title, desc })),
+    services: content.services.map(({ id, title, lead, copy, category }) => ({ id, title, lead, copy, category })),
+  };
+  const rmCalls = [
+    ...content.pillars.map((p) => ({ name: "remove_pillar", args: { pillar: p.id } })),
+    ...content.services.map((s) => ({ name: "remove_service", args: { service: s.id } })),
+  ];
+  const { actions, dropped } = acceptActions(rmCalls, siteWithAll, texts);
+  assert.equal(dropped, 0);
+  let next = content;
+  for (const act of actions) next = applyAction(next, act, ctx).content;
+  assert.equal(next.pillars.length, 0);
+  assert.equal(next.services.length, 0);
+  assert.equal(validData(next), true);
 });

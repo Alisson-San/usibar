@@ -8,7 +8,7 @@ export const TEMPLATE_TYPES = ["blocks", "text-image", "stats", "gallery", "cta"
 
 // ---- Shared vocabulary: icons, free blocks, the opening notice --------------------------------
 // Line icons drawn in the site's style (src/app/icons.tsx), usable in blocks and in the notice.
-export const ICON_NAMES = ["info", "alerta", "calendario", "ferias", "relogio", "feriado", "telefone", "whatsapp", "email", "local", "caminhao", "engrenagem", "ferramenta", "fabrica", "escudo", "check", "estrela", "raio", "pessoas", "documento"];
+export const ICON_NAMES = ["info", "alerta", "calendario", "ferias", "relogio", "feriado", "telefone", "whatsapp", "email", "local", "caminhao", "engrenagem", "ferramenta", "fabrica", "escudo", "check", "estrela", "raio", "pessoas", "documento", "site", "instagram"];
 // Blocks of a free section, WordPress style: each kind with its fields and limits.
 export const BLOCK_SPEC = {
   label: { text: 80 },
@@ -20,12 +20,73 @@ export const BLOCK_SPEC = {
   callout: { icon: "icon", title: 120, text: 600 },
   quote: { text: 1200, author: 120 },
   stats: { items: "stats" },
+  contacts: { links: "contacts", style: ["icons", "list"] },
   divider: {},
 };
 export const BLOCK_KINDS = Object.keys(BLOCK_SPEC);
-export const BLOCK_NAMES = { label: "Rótulo", heading: "Título", text: "Parágrafo", button: "Botão", image: "Foto", features: "Destaques com ícone", callout: "Chamada com ícone", quote: "Citação", stats: "Números", divider: "Divisória" };
+export const BLOCK_NAMES = { label: "Rótulo", heading: "Título", text: "Parágrafo", button: "Botão", image: "Foto", features: "Destaques com ícone", callout: "Chamada com ícone", quote: "Citação", stats: "Números", contacts: "Contatos", divider: "Divisória" };
 const okText = (v, max) => typeof v === "string" && v.trim().length > 0 && v.length <= max;
 const okOpt = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
+// ---- Contacts: WhatsApp, e-mail, phone, site and Instagram as small clickable icons ------------
+// Used on the cards of a "features" block (each card: name, text, small logo and contacts) and on
+// the standalone "contacts" block. Stored normalized; the link is built when the page renders.
+export const CONTACT_TYPES = ["whatsapp", "email", "telefone", "site", "instagram"];
+export const CONTACT_NAMES = { whatsapp: "WhatsApp", email: "E-mail", telefone: "Telefone", site: "Site", instagram: "Instagram" };
+export const CONTACT_HINTS = { whatsapp: "(54) 99999-9999", email: "nome@empresa.com.br", telefone: "(54) 3333-3333", site: "www.empresa.com.br", instagram: "@empresa" };
+const EMAIL = /^[^\s@<>"'(),;:]+@[^\s@<>"'(),;:]+\.[a-z]{2,}$/i;
+/** Turns what the admin typed into the stored value, or null when it is not usable. */
+export function normalizeContact(type, raw) {
+  const v = typeof raw === "string" ? raw.trim() : "";
+  if (!v) return null;
+  if (type === "whatsapp" || type === "telefone") {
+    let d = v.replace(/\D/g, "");
+    if (type === "whatsapp" && (d.length === 10 || d.length === 11)) d = "55" + d; // Brazilian number without the country code
+    return d.length >= 8 && d.length <= 15 ? d : null;
+  }
+  if (type === "email") return v.length <= 120 && EMAIL.test(v) ? v.toLowerCase() : null;
+  if (type === "instagram") {
+    const h = v.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/^@/, "").replace(/[/?#].*$/, "");
+    return /^[a-z0-9._]{1,30}$/i.test(h) ? h : null;
+  }
+  if (type === "site") {
+    const url = /^https?:\/\//i.test(v) ? v.replace(/^http:/i, "https:") : `https://${v}`;
+    return url.length <= 300 && /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?([/?#][^\s"'<>]*)?$/i.test(url) ? url : null;
+  }
+  return null;
+}
+export const validContact = (c) =>
+  !!c && typeof c === "object" && Object.keys(c).every((k) => k === "type" || k === "value") && CONTACT_TYPES.includes(c.type) && typeof c.value === "string" && normalizeContact(c.type, c.value) === c.value;
+const validContacts = (v, max) => Array.isArray(v) && v.length <= max && v.every(validContact);
+export function contactHref({ type, value }) {
+  if (type === "whatsapp") return `https://wa.me/${value}`;
+  if (type === "telefone") return `tel:+${value.length <= 11 ? "55" + value : value}`;
+  if (type === "email") return `mailto:${value}`;
+  if (type === "instagram") return `https://instagram.com/${value}`;
+  return value;
+}
+/** What a person reads: formatted phone, @handle, site without https. */
+export function contactText({ type, value }) {
+  if (type === "whatsapp" || type === "telefone") {
+    const d = value.startsWith("55") && value.length >= 12 ? value.slice(2) : value;
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return value;
+  }
+  if (type === "instagram") return `@${value}`;
+  if (type === "site") return value.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, "");
+  return value;
+}
+const FEATURE_KEYS = ["icon", "title", "text", "logo", "links"];
+export const MAX_FEATURES = 12;
+const validFeature = (it, image) =>
+  !!it &&
+  ICON_NAMES.includes(it.icon) &&
+  okText(it.title, 80) &&
+  okOpt(it.text, 300) &&
+  (it.logo === undefined || image(it.logo)) &&
+  (it.links === undefined || validContacts(it.links, 6)) &&
+  Object.keys(it).every((x) => FEATURE_KEYS.includes(x));
+
 export const validLink = (v) => v === "#orcamento" || v === "#pecas" || v === "whatsapp" || (typeof v === "string" && v.length <= 300 && /^https:\/\/[^\s"'<>]+$/.test(v));
 /** @param {any} b @param {(v: any) => boolean} image */
 export function validBlock(b, image) {
@@ -36,8 +97,8 @@ export function validBlock(b, image) {
     const rule = spec[k];
     if (!rule) return false;
     if (Array.isArray(rule) ? !rule.includes(v) : rule === "image" ? !image(v) : rule === "link" ? !validLink(v) : rule === "icon" ? !ICON_NAMES.includes(v) : false) return false;
-    if (rule === "features" && !(Array.isArray(v) && v.length >= 1 && v.length <= 6 && v.every((it) => it && ICON_NAMES.includes(it.icon) && okText(it.title, 80) && okOpt(it.text, 300) && Object.keys(it).every((x) => ["icon", "title", "text"].includes(x)))))
-      return false;
+    if (rule === "features" && !(Array.isArray(v) && v.length >= 1 && v.length <= MAX_FEATURES && v.every((it) => validFeature(it, image)))) return false;
+    if (rule === "contacts" && !(validContacts(v, 8) && v.length >= 1)) return false;
     if (rule === "stats" && !(Array.isArray(v) && v.length >= 1 && v.length <= 6 && v.every((it) => it && okText(it.value, 40) && okText(it.label, 200) && Object.keys(it).length === 2))) return false;
     if (typeof rule === "number" && !okOpt(v, rule)) return false;
   }
@@ -46,6 +107,7 @@ export function validBlock(b, image) {
   if (b.kind === "button" && !(okText(b.text, 60) && validLink(b.link))) return false;
   if (b.kind === "image" && !image(b.url)) return false;
   if (["features", "stats"].includes(b.kind) && !b.items) return false;
+  if (b.kind === "contacts" && !b.links) return false;
   if (b.kind === "callout" && !(okText(b.title, 120) && ICON_NAMES.includes(b.icon))) return false;
   return true;
 }
@@ -75,7 +137,7 @@ export function validNotice(n) {
 /** True when the notice should be shown on `today` (YYYY-MM-DD, the visitor's local date). */
 export const noticeActive = (n, today) => !!n?.enabled && today >= n.start && today <= n.end;
 // Texts and buttons of the fixed sections the admin removed (they come back with "Recolocar").
-export const validHidden = (h) => Array.isArray(h) && h.length <= 200 && h.every((k) => typeof k === "string" && /^[a-z0-9][a-z0-9._-]{0,79}$/i.test(k));
+export const validHidden = (h) => Array.isArray(h) && h.length <= 500 && h.every((k) => typeof k === "string" && /^[a-z0-9][a-z0-9._-]{0,79}$/i.test(k));
 /* Internal product code (not shown on the site; kept for references and the assistant):
    the next free one in the pattern of the category, USB-CH-01 for cylinders, USB-BH-01 for blocks. */
 export function nextCode(category, codes) {
@@ -136,22 +198,28 @@ const obj = (properties, required = []) => ({ type: "OBJECT", properties, ...(re
 const SECTION = s("O id da seção, exatamente como aparece em SEÇÕES.");
 const IMAGE = s("O id de uma foto anexada nesta conversa (ex.: foto-1).");
 const ASSET_IMAGE = s("Foto pronta do acervo com fundo recortado (use quando nenhuma foto foi anexada).", { enum: ASSET_IMAGES });
+const CONTACT_LIST = {
+  type: "ARRAY",
+  description: "Contatos clicáveis, mostrados como ícones: whatsapp e telefone (número com DDD), email, site (endereço) ou instagram (@perfil).",
+  items: obj({ type: s("Tipo do contato.", { enum: CONTACT_TYPES }), value: s("Número, e-mail, endereço ou @perfil.") }, ["type", "value"]),
+};
 const BLOCK_PROPS = {
-  kind: s("Tipo do bloco: label (rótulo), heading (título), text (parágrafo), button (botão), image (foto), features (destaques com ícone), callout (chamada com ícone), quote (citação), stats (números), divider (divisória).", { enum: BLOCK_KINDS }),
+  kind: s("Tipo do bloco: label (rótulo), heading (título), text (parágrafo), button (botão), image (foto), features (destaques com ícone: cartões com ícone, título, texto e contatos, ex.: representantes, filiais, equipe), callout (chamada com ícone), quote (citação), stats (números), contacts (linha de ícones de contato), divider (divisória).", { enum: BLOCK_KINDS }),
   text: s("Texto do rótulo, título, parágrafo, botão, chamada ou citação."),
   title: s("Título da chamada com ícone."),
   author: s("Autor da citação."),
   size: s("Tamanho do título.", { enum: ["lg", "md"] }),
   link: s("Destino do botão: #orcamento, #pecas, whatsapp ou um link https://."),
-  style: s("Estilo do botão.", { enum: ["solid", "ghost"] }),
+  style: s("Estilo do botão (solid, ghost) ou dos contatos (icons: só ícones; list: ícone e texto).", { enum: ["solid", "ghost", "icons", "list"] }),
   icon: s("Ícone da chamada.", { enum: ICON_NAMES }),
   image: IMAGE,
   caption: s("Legenda da foto."),
   items: {
     type: "ARRAY",
-    description: "Itens de destaques (icon, title, text) ou de números (value, label), até 6.",
-    items: obj({ icon: s("Ícone.", { enum: ICON_NAMES }), title: s("Título"), text: s("Texto"), value: s("Número"), label: s("Legenda") }),
+    description: "Itens de destaques (icon, title, text e links de contato, até 12) ou de números (value, label, até 6).",
+    items: obj({ icon: s("Ícone.", { enum: ICON_NAMES }), title: s("Título"), text: s("Texto"), value: s("Número"), label: s("Legenda"), links: CONTACT_LIST }),
   },
+  links: CONTACT_LIST,
 };
 const TEMPLATE_PROPS = {
   nav: s("Nome curto da seção no menu (até 40 caracteres)."),
@@ -505,6 +573,13 @@ export function acceptActions(calls, site, texts) {
     return data;
   }
 
+  function contactsArg(list, max) {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((l) => l && CONTACT_TYPES.includes(l.type) && normalizeContact(l.type, l.value) && { type: l.type, value: normalizeContact(l.type, l.value) })
+      .filter(Boolean)
+      .slice(0, max);
+  }
   function blockArgs(a, creating) {
     const kind = creating ? a.kind : a._kind;
     const spec = BLOCK_SPEC[kind];
@@ -520,14 +595,18 @@ export function acceptActions(calls, site, texts) {
       else if (rule === "image" && image(a.image)) out.image = a.image;
       else if ((rule === "features" || rule === "stats") && Array.isArray(a.items)) {
         const items = a.items
-          .map((it) =>
-            rule === "features"
-              ? it && ICON_NAMES.includes(it.icon) && clip(it.title, 80) && { icon: it.icon, title: clip(it.title, 80), ...(clip(it.text, 300) ? { text: clip(it.text, 300) } : {}) }
-              : it && clip(it.value, 40) && clip(it.label, 200) && { value: clip(it.value, 40), label: clip(it.label, 200) },
-          )
+          .map((it) => {
+            if (rule === "stats") return it && clip(it.value, 40) && clip(it.label, 200) && { value: clip(it.value, 40), label: clip(it.label, 200) };
+            if (!it || !clip(it.title, 80)) return null;
+            const links = contactsArg(it.links, 6);
+            return { ...(ICON_NAMES.includes(it.icon) ? { icon: it.icon } : creating ? { icon: "check" } : {}), title: clip(it.title, 80), ...(clip(it.text, 300) ? { text: clip(it.text, 300) } : {}), ...(links.length ? { links } : {}) };
+          })
           .filter(Boolean)
-          .slice(0, 6);
+          .slice(0, rule === "features" ? MAX_FEATURES : 6);
         if (items.length) out.items = items;
+      } else if (rule === "contacts") {
+        const links = contactsArg(a.links, 8);
+        if (links.length) out.links = links;
       }
     }
     if (!creating && kind === "image" && !out.image && asset(a.asset_image)) out.asset_image = a.asset_image;
@@ -541,6 +620,7 @@ export function acceptActions(calls, site, texts) {
     }
     if (kind === "callout") Object.assign(out, { icon: out.icon ?? "info", title: out.title ?? out.text ?? "Aviso" });
     if ((kind === "features" || kind === "stats") && !out.items) return null;
+    if (kind === "contacts" && !out.links) return null;
     return out;
   }
   function blocksOf(id) {
@@ -675,7 +755,7 @@ export function acceptActions(calls, site, texts) {
         return Object.keys(sv).length ? { service: a.service, ...sv } : null;
       }
       case "remove_service": {
-        if (!services.has(a.service) || services.size <= 1) return null;
+        if (!services.has(a.service)) return null;
         services.delete(a.service);
         return { service: a.service };
       }
@@ -715,7 +795,7 @@ export function acceptActions(calls, site, texts) {
         return Object.keys(out).length > 1 ? out : null;
       }
       case "remove_pillar": {
-        if (!pillars.has(a.pillar) || pillars.size <= 1) return null;
+        if (!pillars.has(a.pillar)) return null;
         pillars.delete(a.pillar);
         return { pillar: a.pillar };
       }
@@ -1181,7 +1261,6 @@ export function applyAction(c, { name, args: a }, ctx) {
     case "remove_service": {
       const list = c.services ?? [];
       const cur = list.find((s) => s.id === a.service) ?? fail("Essa solução não existe mais.");
-      if (list.length <= 1) fail("Mantenha pelo menos uma solução na seção.");
       return { content: { ...c, services: list.filter((s) => s.id !== cur.id) }, label: `Solução “${cur.title}” removida` };
     }
     case "add_sector": {
@@ -1219,7 +1298,6 @@ export function applyAction(c, { name, args: a }, ctx) {
     case "remove_pillar": {
       const list = c.pillars ?? [];
       const cur = list.find((p) => p.id === a.pillar) ?? fail("Esse pilar não existe mais.");
-      if (list.length <= 1) fail("Mantenha pelo menos um pilar.");
       return { content: { ...c, pillars: list.filter((p) => p.id !== cur.id) }, label: `Pilar “${cur.title}” removido` };
     }
     case "update_process_step": {
@@ -1246,7 +1324,16 @@ export function applyAction(c, { name, args: a }, ctx) {
         const nb = withImage({ id: ctx.newId(), ...fields });
         const i = position ? Math.max(0, Math.min(list.length, position - 1)) : list.length;
         list.splice(i, 0, nb);
-      } else if (name === "update_block") list[at] = withImage({ ...list[at], ...fields });
+      } else if (name === "update_block") {
+        const old = list[at];
+        // New card texts from the assistant keep each card's logo (it cannot upload one itself).
+        if (fields.items && old.kind === "features")
+          fields.items = fields.items.map((it, i) => {
+            const prev = old.items?.[i];
+            return { ...it, icon: it.icon ?? prev?.icon ?? "check", ...(prev?.logo && !it.logo ? { logo: prev.logo } : {}) };
+          });
+        list[at] = withImage({ ...old, ...fields });
+      }
       else if (name === "remove_block") list.splice(at, 1);
       else {
         const [x] = list.splice(at, 1);

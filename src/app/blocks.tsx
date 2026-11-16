@@ -1,8 +1,9 @@
 "use client";
 import { useContext, useRef, useState } from "react";
 import { Icon, IconPicker } from "./icons";
-import { CopyContext, Editable, ImageSwap } from "./copy";
+import { CopyContext, Editable, ImageSwap, Removable, RemovableContext, T } from "./copy";
 import { useModal } from "./editing";
+import { CONTACT_HINTS, CONTACT_NAMES, CONTACT_TYPES, MAX_FEATURES, contactHref, contactText, normalizeContact } from "@/lib/site-actions.mjs";
 
 // The page between the hero and the footer is an ordered list of sections. Built-in sections
 // keep their own content (catalog, process…); new sections come from templates and carry
@@ -104,52 +105,163 @@ export const blockDom = (b: Block) => (isBuiltin(b.type) ? BUILTIN_INFO[b.type].
 
 type Update = (id: string, change: (data: Record<string, unknown>) => Record<string, unknown>, label: string) => void;
 
-// Text of a template section, editable in place; style key follows the section, not its position.
-function BText({ block, field, label, update, className }: { block: Block; field: string; label: string; update: Update; className?: string }) {
+function OptionalSlot({
+  active,
+  label,
+  onRemove,
+  onRestore,
+  block = false,
+  children,
+}: {
+  active: boolean;
+  label: string;
+  onRemove: () => void;
+  onRestore: () => void;
+  block?: boolean;
+  children: React.ReactNode;
+}) {
+  const { editing, activate } = useContext(CopyContext);
+  const Tag = block ? "div" : "span";
+  if (!editing) return active ? <>{children}</> : null;
+  if (!active)
+    return (
+      <Tag className="removed-slot">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onRestore();
+          }}
+        >
+          ↺ Recolocar “{label}”
+        </button>
+      </Tag>
+    );
+  return (
+    <RemovableContext.Provider value={onRemove}>
+      <Tag className="removable">
+        {children}
+        <button
+          type="button"
+          className="remove-x"
+          aria-label={`Remover “${label}”`}
+          title={`Remover “${label}”`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            activate(null);
+            onRemove();
+          }}
+        >
+          ×
+        </button>
+      </Tag>
+    </RemovableContext.Provider>
+  );
+}
+
+// Text of a template section, editable and removable in place; style key follows the section, not its position.
+function BText({
+  block,
+  field,
+  label,
+  update,
+  className,
+  restore = "Texto",
+  blockSlot = false,
+}: {
+  block: Block;
+  field: string;
+  label: string;
+  update: Update;
+  className?: string;
+  restore?: string;
+  blockSlot?: boolean;
+}) {
   const { editing } = useContext(CopyContext);
   const value = String(block.data?.[field] ?? "");
-  if (!value && !editing) return null;
   return (
-    <Editable
-      value={value || "—"}
-      editing={editing}
+    <OptionalSlot
+      active={Boolean(value)}
       label={label}
-      className={className}
-      styleKey={`block.${block.id}.${field}`}
-      onCommit={(v) => update(block.id, (d) => ({ ...d, [field]: v }), label)}
-    />
+      block={blockSlot}
+      onRemove={() => update(block.id, (d) => ({ ...d, [field]: "" }), `${label} removido`)}
+      onRestore={() => update(block.id, (d) => ({ ...d, [field]: restore }), `${label} recolocado`)}
+    >
+      <Editable
+        value={value}
+        editing={editing}
+        label={label}
+        className={className}
+        styleKey={`block.${block.id}.${field}`}
+        onCommit={(v) => update(block.id, (d) => ({ ...d, [field]: v }), label)}
+      />
+    </OptionalSlot>
   );
 }
 
 export function TemplateSection({ block, num, update, whatsapp }: { block: Block; num: string; update: Update; whatsapp: (text: string) => string }) {
-  const { editing } = useContext(CopyContext);
+  const { editing, hidden } = useContext(CopyContext);
   const d = block.data ?? {};
   const p = { block, update };
-  const eyebrow = (
-    <span className="eyebrow">
-      {num} — <BText {...p} field="eyebrow" label="Rótulo da seção" />
-    </span>
-  );
+  const numKey = `block.${block.id.toLowerCase()}.num`;
+  const numOff = hidden.includes(numKey);
+  const hasEyebrow = Boolean(d.eyebrow);
+  const eyebrow =
+    editing || !numOff || hasEyebrow ? (
+      <span className="eyebrow">
+        <Removable k={numKey} label="Numeração da seção">
+          <T k={numKey} d={num} label="Numeração da seção" />
+        </Removable>
+        {!numOff && hasEyebrow && " — "}
+        <BText {...p} field="eyebrow" label="Rótulo da seção" restore="DESTAQUE" />
+      </span>
+    ) : null;
   const dom = blockDom(block);
   switch (block.type) {
-    case "text-image":
+    case "text-image": {
+      const hasTitle = Boolean(d.title);
+      const hasAccent = Boolean(d.accent);
+      const hasText = Boolean(d.text);
+      const hasCta = Boolean(d.cta);
       return (
         <section id={dom} className={"tpl tpl-text-image" + (d.side === "left" ? " flip" : "")}>
           <div className="tpl-copy reveal">
             {eyebrow}
-            <h2>
-              <BText {...p} field="title" label="Título" />
-              <br />
-              <em>
-                <BText {...p} field="accent" label="Título (destaque)" />
-              </em>
-            </h2>
-            <p>
-              <BText {...p} field="text" label="Texto" />
-            </p>
-            <a className="btn-solid" href="#orcamento">
-              <BText {...p} field="cta" label="Botão" /> <span aria-hidden="true">↗</span>
-            </a>
+            {(editing || hasTitle || hasAccent) && (
+              <h2>
+                <BText {...p} field="title" label="Título" restore="Título da seção" />
+                {hasTitle && hasAccent && <br />}
+                {(editing || hasAccent) && (
+                  <em>
+                    <BText {...p} field="accent" label="Título (destaque)" restore="complemento em destaque." />
+                  </em>
+                )}
+              </h2>
+            )}
+            {(editing || hasText) && (
+              <p>
+                <BText {...p} field="text" label="Texto" restore="Escreva aqui o texto desta seção." />
+              </p>
+            )}
+            <OptionalSlot
+              active={hasCta}
+              label="Botão"
+              onRemove={() => update(block.id, (x) => ({ ...x, cta: "" }), "Botão removido")}
+              onRestore={() => update(block.id, (x) => ({ ...x, cta: "Solicitar orçamento" }), "Botão recolocado")}
+            >
+              <a className="btn-solid" href="#orcamento">
+                <Editable
+                  value={String(d.cta ?? "")}
+                  editing={editing}
+                  label="Botão"
+                  styleKey={`block.${block.id}.cta`}
+                  onCommit={(v) => update(block.id, (x) => ({ ...x, cta: v }), "Botão")}
+                />{" "}
+                <span aria-hidden="true">↗</span>
+              </a>
+            </OptionalSlot>
           </div>
           <figure className="tpl-figure">
             <img src={String(d.imageUrl ?? "")} alt="" loading="lazy" />
@@ -164,6 +276,7 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
           </figure>
         </section>
       );
+    }
     case "stats": {
       const items = (d.items as Item[]) ?? [];
       const setItem = (i: number, key: keyof Item) => (v: string) =>
@@ -172,18 +285,34 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
         <section id={dom} className="tpl tpl-stats">
           <div className="tpl-head reveal">
             {eyebrow}
-            <h2>
-              <BText {...p} field="title" label="Título" />
-            </h2>
+            {(editing || Boolean(d.title)) && (
+              <h2>
+                <BText {...p} field="title" label="Título" restore="A Usibar em números" />
+              </h2>
+            )}
           </div>
           <ul className="tpl-stat-list">
             {items.map((it, i) => (
               <li key={i}>
                 <strong>
-                  <Editable value={it.value} editing={editing} label={`Número ${i + 1}`} styleKey={`block.${block.id}.items.${i}.value`} onCommit={setItem(i, "value")} />
+                  <Editable
+                    value={it.value}
+                    editing={editing}
+                    label={`Número ${i + 1}`}
+                    styleKey={`block.${block.id}.items.${i}.value`}
+                    onCommit={setItem(i, "value")}
+                    onRemove={items.length > 1 ? () => update(block.id, (x) => ({ ...x, items: (x.items as Item[]).filter((_, j) => j !== i) }), "Número removido") : undefined}
+                  />
                 </strong>
                 <span>
-                  <Editable value={it.label} editing={editing} label={`Legenda ${i + 1}`} styleKey={`block.${block.id}.items.${i}.label`} onCommit={setItem(i, "label")} />
+                  <Editable
+                    value={it.label}
+                    editing={editing}
+                    label={`Legenda ${i + 1}`}
+                    styleKey={`block.${block.id}.items.${i}.label`}
+                    onCommit={setItem(i, "label")}
+                    onRemove={items.length > 1 ? () => update(block.id, (x) => ({ ...x, items: (x.items as Item[]).filter((_, j) => j !== i) }), "Número removido") : undefined}
+                  />
                 </span>
                 {editing && items.length > 1 && (
                   <button className="tpl-remove" aria-label={`Remover número ${i + 1}`} onClick={() => update(block.id, (x) => ({ ...x, items: (x.items as Item[]).filter((_, j) => j !== i) }), "Número removido")}>
@@ -210,9 +339,11 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
         <section id={dom} className="tpl tpl-gallery">
           <div className="tpl-head reveal">
             {eyebrow}
-            <h2>
-              <BText {...p} field="title" label="Título" />
-            </h2>
+            {(editing || Boolean(d.title)) && (
+              <h2>
+                <BText {...p} field="title" label="Título" restore="Trabalhos recentes" />
+              </h2>
+            )}
           </div>
           <ul className="tpl-photos">
             {images.map((ph, i) => (
@@ -226,15 +357,24 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
                     </button>
                   )}
                 </figure>
-                <figcaption>
-                  <Editable
-                    value={ph.caption}
-                    editing={editing}
-                    label={`Legenda da foto ${i + 1}`}
-                    styleKey={`block.${block.id}.images.${i}.caption`}
-                    onCommit={(v) => setImages((l) => l.map((x, j) => (j === i ? { ...x, caption: v } : x)), "Legenda")}
-                  />
-                </figcaption>
+                {(editing || Boolean(ph.caption)) && (
+                  <figcaption>
+                    <OptionalSlot
+                      active={Boolean(ph.caption)}
+                      label={`Legenda da foto ${i + 1}`}
+                      onRemove={() => setImages((l) => l.map((x, j) => (j === i ? { ...x, caption: "" } : x)), "Legenda removida")}
+                      onRestore={() => setImages((l) => l.map((x, j) => (j === i ? { ...x, caption: "Legenda da foto" } : x)), "Legenda recolocada")}
+                    >
+                      <Editable
+                        value={ph.caption}
+                        editing={editing}
+                        label={`Legenda da foto ${i + 1}`}
+                        styleKey={`block.${block.id}.images.${i}.caption`}
+                        onCommit={(v) => setImages((l) => l.map((x, j) => (j === i ? { ...x, caption: v } : x)), "Legenda")}
+                      />
+                    </OptionalSlot>
+                  </figcaption>
+                )}
               </li>
             ))}
             {editing && images.length < 12 && (
@@ -249,15 +389,33 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
     case "cta":
       return (
         <section id={dom} className="tpl tpl-cta" data-tone="dark">
-          <h2 className="reveal">
-            <BText {...p} field="title" label="Título" />
-          </h2>
-          <p>
-            <BText {...p} field="text" label="Texto" />
-          </p>
-          <a className="btn-solid light" href={whatsapp(String(d.title ?? "Olá, Usibar!"))} target="_blank" rel="noreferrer">
-            <BText {...p} field="button" label="Botão" /> <span aria-hidden="true">↗</span>
-          </a>
+          {(editing || Boolean(d.title)) && (
+            <h2 className="reveal">
+              <BText {...p} field="title" label="Título" restore="Tem um projeto em mente?" />
+            </h2>
+          )}
+          {(editing || Boolean(d.text)) && (
+            <p>
+              <BText {...p} field="text" label="Texto" restore="Envie o desenho ou as especificações e receba a proposta da Usibar." />
+            </p>
+          )}
+          <OptionalSlot
+            active={Boolean(d.button)}
+            label="Botão"
+            onRemove={() => update(block.id, (x) => ({ ...x, button: "" }), "Botão removido")}
+            onRestore={() => update(block.id, (x) => ({ ...x, button: "Falar no WhatsApp" }), "Botão recolocado")}
+          >
+            <a className="btn-solid light" href={whatsapp(String(d.title ?? "Olá, Usibar!"))} target="_blank" rel="noreferrer">
+              <Editable
+                value={String(d.button ?? "")}
+                editing={editing}
+                label="Botão"
+                styleKey={`block.${block.id}.button`}
+                onCommit={(v) => update(block.id, (x) => ({ ...x, button: v }), "Botão")}
+              />{" "}
+              <span aria-hidden="true">↗</span>
+            </a>
+          </OptionalSlot>
         </section>
       );
     case "blocks":
@@ -269,17 +427,25 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
             “
           </span>
           <blockquote className="reveal">
-            <p>
-              <BText {...p} field="quote" label="Depoimento" />
-            </p>
-            <footer>
-              <strong>
-                <BText {...p} field="author" label="Autor" />
-              </strong>
-              <span>
-                <BText {...p} field="role" label="Empresa e cargo" />
-              </span>
-            </footer>
+            {(editing || Boolean(d.quote)) && (
+              <p>
+                <BText {...p} field="quote" label="Depoimento" restore="Escreva aqui o depoimento de um cliente." />
+              </p>
+            )}
+            {(editing || Boolean(d.author) || Boolean(d.role)) && (
+              <footer>
+                {(editing || Boolean(d.author)) && (
+                  <strong>
+                    <BText {...p} field="author" label="Autor" restore="Nome do cliente" />
+                  </strong>
+                )}
+                {(editing || Boolean(d.role)) && (
+                  <span>
+                    <BText {...p} field="role" label="Empresa e cargo" restore="Empresa · cargo" />
+                  </span>
+                )}
+              </footer>
+            )}
           </blockquote>
         </section>
       );
@@ -289,7 +455,9 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
 }
 
 // ---- Free section: a column of blocks, WordPress style ------------------------------------------
-type UBlock = { id: string; kind: string; text?: string; title?: string; author?: string; size?: string; link?: string; style?: string; icon?: string; url?: string; caption?: string; items?: { icon?: string; title?: string; text?: string; value?: string; label?: string }[] };
+type Contact = { type: string; value: string };
+type UItem = { icon?: string; title?: string; text?: string; value?: string; label?: string; logo?: string; links?: Contact[] };
+type UBlock = { id: string; kind: string; text?: string; title?: string; author?: string; size?: string; link?: string; style?: string; icon?: string; url?: string; caption?: string; items?: UItem[]; links?: Contact[] };
 const KIND_INFO: Record<string, [string, string]> = {
   label: ["Rótulo", "documento"],
   heading: ["Título", "estrela"],
@@ -300,8 +468,21 @@ const KIND_INFO: Record<string, [string, string]> = {
   callout: ["Chamada com ícone", "alerta"],
   quote: ["Citação", "pessoas"],
   stats: ["Números", "check"],
+  contacts: ["Contatos (WhatsApp, e-mail…)", "telefone"],
   divider: ["Divisória", "ferramenta"],
 };
+// Ready-made starting points in the "+ Bloco" menu, besides the plain kinds.
+const PRESETS: { name: string; icon: string; after: string; make: () => UBlock }[] = [
+  {
+    name: "Cartões de contato (representantes, equipe)",
+    icon: "pessoas",
+    after: "features",
+    make: () =>
+      newBlock("features", {
+        items: [1, 2, 3].map((n) => ({ icon: "pessoas", title: `Nome ${n}`, text: "Região atendida" })),
+      }),
+  },
+];
 const blockId = () => crypto.randomUUID().replace(/-/g, "").slice(0, 10);
 export function newBlock(kind: string, extra: Partial<UBlock> = {}): UBlock {
   const base: Record<string, Partial<UBlock>> = {
@@ -320,6 +501,7 @@ export function newBlock(kind: string, extra: Partial<UBlock> = {}): UBlock {
     callout: { icon: "info", title: "Atenção", text: "Escreva aqui a mensagem em destaque." },
     quote: { text: "Escreva aqui o depoimento.", author: "Nome do cliente" },
     stats: { items: [{ value: "20+", label: "anos de experiência" }, { value: "6", label: "segmentos atendidos" }] },
+    contacts: { links: [{ type: "email", value: "contato@empresa.com.br" }], style: "list" },
     divider: {},
   };
   return { id: blockId(), kind, ...base[kind], ...extra };
@@ -330,6 +512,176 @@ const LINKS: [string, string][] = [
   ["whatsapp", "WhatsApp"],
 ];
 
+/* Contacts as small round icons (or icon + text). While editing, each one opens a little form
+   to change or remove it, and "+ Contato" adds another. */
+function ContactLinks({
+  links,
+  list = false,
+  max,
+  onChange,
+}: {
+  links: Contact[];
+  list?: boolean;
+  max: number;
+  onChange: (links: Contact[], label: string) => void;
+}) {
+  const { editing } = useContext(CopyContext);
+  const [open, setOpen] = useState<number | null>(null); // index, or links.length for a new one
+  if (!links.length && !editing) return null;
+  return (
+    <div className="ub-contacts-wrap">
+      <ul className={`ub-contacts${list ? " is-list" : ""}`}>
+        {links.map((l, i) => {
+          const text = contactText(l);
+          const external = l.type === "whatsapp" || l.type === "site" || l.type === "instagram";
+          return (
+            <li key={i}>
+              <a
+                href={contactHref(l)}
+                {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+                title={`${CONTACT_NAMES[l.type as keyof typeof CONTACT_NAMES]}: ${text}${editing ? " — clique para alterar" : ""}`}
+                aria-label={`${CONTACT_NAMES[l.type as keyof typeof CONTACT_NAMES]}: ${text}`}
+                onClick={(e) => {
+                  if (!editing) return;
+                  e.preventDefault();
+                  setOpen(open === i ? null : i);
+                }}
+              >
+                <span className="ub-contact-ico">
+                  <Icon name={l.type} />
+                </span>
+                {list && <span className="ub-contact-text">{text}</span>}
+              </a>
+            </li>
+          );
+        })}
+        {editing && links.length < max && (
+          <li>
+            <button type="button" className="ub-contact-add" onClick={() => setOpen(open === links.length ? null : links.length)}>
+              + Contato
+            </button>
+          </li>
+        )}
+      </ul>
+      {editing && open !== null && (
+        <ContactForm
+          key={open}
+          initial={links[open]}
+          onCancel={() => setOpen(null)}
+          onSave={(c) => {
+            setOpen(null);
+            if (open < links.length) onChange(links.map((x, j) => (j === open ? c : x)), "Contato alterado");
+            else onChange([...links, c], `${CONTACT_NAMES[c.type as keyof typeof CONTACT_NAMES]} adicionado`);
+          }}
+          onRemove={
+            open < links.length
+              ? () => {
+                  setOpen(null);
+                  onChange(links.filter((_, j) => j !== open), "Contato removido");
+                }
+              : undefined
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function ContactForm({ initial, onSave, onRemove, onCancel }: { initial?: Contact; onSave: (c: Contact) => void; onRemove?: () => void; onCancel: () => void }) {
+  const [type, setType] = useState(initial?.type ?? "whatsapp");
+  const [value, setValue] = useState(initial ? contactText(initial) : "");
+  const [error, setError] = useState("");
+  const save = () => {
+    const v = normalizeContact(type, value);
+    if (!v) return setError(`Confira o ${CONTACT_NAMES[type as keyof typeof CONTACT_NAMES]}: ex. ${CONTACT_HINTS[type as keyof typeof CONTACT_HINTS]}`);
+    onSave({ type, value: v });
+  };
+  return (
+    <div
+      className="ub-contact-form"
+      role="dialog"
+      aria-label={initial ? "Alterar contato" : "Novo contato"}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onCancel();
+      }}
+    >
+      <div className="ub-contact-types" role="radiogroup" aria-label="Tipo de contato">
+        {CONTACT_TYPES.map((t) => (
+          <button key={t} type="button" role="radio" aria-checked={t === type} className={t === type ? "on" : ""} onClick={() => (setType(t), setError(""))}>
+            <Icon name={t} /> {CONTACT_NAMES[t as keyof typeof CONTACT_NAMES]}
+          </button>
+        ))}
+      </div>
+      <input
+        autoFocus
+        value={value}
+        placeholder={CONTACT_HINTS[type as keyof typeof CONTACT_HINTS]}
+        aria-label={CONTACT_NAMES[type as keyof typeof CONTACT_NAMES]}
+        inputMode={type === "whatsapp" || type === "telefone" ? "tel" : type === "email" ? "email" : "url"}
+        onChange={(e) => (setValue(e.target.value), setError(""))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            save();
+          }
+        }}
+      />
+      {error && <p className="ub-contact-error">{error}</p>}
+      <div className="ub-contact-actions">
+        <button type="button" className="primary" onClick={save}>
+          {initial ? "Salvar" : "Adicionar"}
+        </button>
+        {onRemove && (
+          <button type="button" className="danger" onClick={onRemove}>
+            Remover
+          </button>
+        )}
+        <button type="button" onClick={onCancel}>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* The small logo at the start of a card's name; in edit mode, add / adjust / swap / remove it. */
+function LogoTools({ logo, onChange }: { logo?: string; onChange: (url: string | undefined, label: string) => void }) {
+  const { openPhotoEditor } = useContext(CopyContext);
+  const pick = (
+    <input
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      className="sr-only"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        e.target.value = "";
+        if (file) openPhotoEditor(file, { label: "logo", onSave: (url) => onChange(url, logo ? "Logo trocada" : "Logo adicionada") });
+      }}
+    />
+  );
+  if (!logo)
+    return (
+      <label className="ub-tool" title="Uma logo pequena no início do nome, no lugar do ícone">
+        + Logo
+        {pick}
+      </label>
+    );
+  return (
+    <>
+      <button type="button" className="ub-tool" onClick={() => openPhotoEditor(logo, { label: "logo", onSave: (url) => onChange(url, "Logo ajustada") })}>
+        Ajustar logo
+      </button>
+      <label className="ub-tool">
+        Trocar logo
+        {pick}
+      </label>
+      <button type="button" className="ub-tool danger" onClick={() => onChange(undefined, "Logo removida")}>
+        Tirar logo
+      </button>
+    </>
+  );
+}
+
 function FreeSection({ block, num, update, whatsapp }: { block: Block; num: string; update: Update; whatsapp: (text: string) => string }) {
   const { editing } = useContext(CopyContext);
   const [menuAt, setMenuAt] = useState<number | null>(null);
@@ -337,35 +689,81 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
   const blocks = (block.data?.blocks as UBlock[]) ?? [];
   const set = (change: (l: UBlock[]) => UBlock[], label: string) => update(block.id, (d) => ({ ...d, blocks: change((d.blocks as UBlock[]) ?? []) }), label);
   const patch = (id: string, p: Partial<UBlock>, label: string) => set((l) => l.map((b) => (b.id === id ? { ...b, ...p } : b)), label);
-  const field = (b: UBlock, key: "text" | "title" | "author" | "caption", label: string, className?: string) => {
+  const removeBlock = (b: UBlock) => () => set((l) => l.filter((x) => x.id !== b.id), `Bloco “${KIND_INFO[b.kind]?.[0] ?? b.kind}” removido`);
+  const field = (b: UBlock, key: "text" | "title" | "author" | "caption", label: string, opts?: { className?: string; optional?: string; removeWholeBlock?: boolean }) => {
     const value = String(b[key] ?? "");
+    if (opts?.optional !== undefined) {
+      return (
+        <OptionalSlot
+          active={Boolean(value)}
+          label={label}
+          onRemove={() => patch(b.id, { [key]: "" }, `${label} removido`)}
+          onRestore={() => patch(b.id, { [key]: opts.optional }, `${label} recolocado`)}
+        >
+          <Editable value={value} editing={editing} label={label} className={opts?.className} styleKey={`block.${block.id}.${b.id}.${key}`} onCommit={(v) => patch(b.id, { [key]: v }, label)} />
+        </OptionalSlot>
+      );
+    }
     if (!value && !editing) return null;
     return (
-      <Editable value={value || "—"} editing={editing} label={label} className={className} styleKey={`block.${block.id}.${b.id}.${key}`} onCommit={(v) => patch(b.id, { [key]: v }, label)} />
+      <Editable
+        value={value || "—"}
+        editing={editing}
+        label={label}
+        className={opts?.className}
+        styleKey={`block.${block.id}.${b.id}.${key}`}
+        onCommit={(v) => patch(b.id, { [key]: v }, label)}
+        onRemove={opts?.removeWholeBlock ? removeBlock(b) : undefined}
+      />
     );
   };
-  const item = (b: UBlock, i: number, key: "title" | "text" | "value" | "label", label: string) => (
-    <Editable
-      value={String(b.items?.[i]?.[key] ?? "") || "—"}
-      editing={editing}
-      label={label}
-      styleKey={`block.${block.id}.${b.id}.items.${i}.${key}`}
-      onCommit={(v) => patch(b.id, { items: b.items!.map((x, j) => (j === i ? { ...x, [key]: v } : x)) }, label)}
-    />
-  );
+  const item = (b: UBlock, i: number, key: "title" | "text" | "value" | "label", label: string, optionalRestore?: string) => {
+    const val = String(b.items?.[i]?.[key] ?? "");
+    if (optionalRestore !== undefined) {
+      return (
+        <OptionalSlot
+          active={Boolean(val)}
+          label={label}
+          onRemove={() => patch(b.id, { items: b.items!.map((x, j) => (j === i ? { ...x, [key]: "" } : x)) }, `${label} removido`)}
+          onRestore={() => patch(b.id, { items: b.items!.map((x, j) => (j === i ? { ...x, [key]: optionalRestore } : x)) }, `${label} recolocado`)}
+        >
+          <Editable
+            value={val}
+            editing={editing}
+            label={label}
+            styleKey={`block.${block.id}.${b.id}.items.${i}.${key}`}
+            onCommit={(v) => patch(b.id, { items: b.items!.map((x, j) => (j === i ? { ...x, [key]: v } : x)) }, label)}
+          />
+        </OptionalSlot>
+      );
+    }
+    return (
+      <Editable
+        value={val || "—"}
+        editing={editing}
+        label={label}
+        styleKey={`block.${block.id}.${b.id}.items.${i}.${key}`}
+        onCommit={(v) => patch(b.id, { items: b.items!.map((x, j) => (j === i ? { ...x, [key]: v } : x)) }, label)}
+      />
+    );
+  };
   const href = (link = "#orcamento") => (link === "whatsapp" ? whatsapp("Olá, Usibar!") : link);
   const render = (b: UBlock) => {
     switch (b.kind) {
       case "label":
-        return <span className="eyebrow">{field(b, "text", "Rótulo")}</span>;
+        return <span className="eyebrow">{field(b, "text", "Rótulo", { removeWholeBlock: true })}</span>;
       case "heading":
-        return b.size === "lg" ? <h2 className="ub-h lg">{field(b, "text", "Título")}</h2> : <h3 className="ub-h">{field(b, "text", "Título")}</h3>;
+        return b.size === "lg" ? (
+          <h2 className="ub-h lg">{field(b, "text", "Título", { removeWholeBlock: true })}</h2>
+        ) : (
+          <h3 className="ub-h">{field(b, "text", "Título", { removeWholeBlock: true })}</h3>
+        );
       case "text":
-        return <p className="ub-text">{field(b, "text", "Parágrafo")}</p>;
+        return <p className="ub-text">{field(b, "text", "Parágrafo", { removeWholeBlock: true })}</p>;
       case "button":
         return (
           <a className={b.style === "ghost" ? "btn-ghost" : "btn-solid"} href={href(b.link)} {...(b.link?.startsWith("http") || b.link === "whatsapp" ? { target: "_blank", rel: "noreferrer" } : {})} onClick={(e) => editing && e.preventDefault()}>
-            {field(b, "text", "Botão")} <span aria-hidden="true">↗</span>
+            {field(b, "text", "Botão", { removeWholeBlock: true })} <span aria-hidden="true">↗</span>
           </a>
         );
       case "image":
@@ -375,43 +773,81 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
             <span className="image-bracket tl" />
             <span className="image-bracket br" />
             <ImageSwap src={b.url} label="foto" onChange={(url) => patch(b.id, { url }, "Foto do bloco")} />
-            {(b.caption || editing) && <figcaption>{field(b, "caption", "Legenda da foto")}</figcaption>}
+            {(b.caption || editing) && <figcaption>{field(b, "caption", "Legenda da foto", { optional: "Legenda da foto" })}</figcaption>}
           </figure>
         );
-      case "features":
+      case "features": {
+        const items = b.items ?? [];
+        const setItem = (i: number, p: Partial<UItem>, label: string) =>
+          patch(b.id, { items: items.map((x, j) => (j === i ? Object.fromEntries(Object.entries({ ...x, ...p }).filter(([, v]) => v !== undefined && !(Array.isArray(v) && !v.length))) : x)) }, label);
         return (
           <ul className="ub-features">
-            {(b.items ?? []).map((it, i) => (
+            {items.map((it, i) => (
               <li key={i}>
-                <button type="button" className="ub-icon" disabled={!editing} onClick={() => setIconFor(iconFor === `${b.id}:${i}` ? null : `${b.id}:${i}`)} aria-label="Trocar ícone">
-                  <Icon name={it.icon ?? "info"} />
-                </button>
+                <div className="ub-card-head">
+                  {it.logo ? (
+                    <img className="ub-logo" src={it.logo} alt="" loading="lazy" />
+                  ) : (
+                    <button type="button" className="ub-icon" disabled={!editing} onClick={() => setIconFor(iconFor === `${b.id}:${i}` ? null : `${b.id}:${i}`)} aria-label="Trocar ícone">
+                      <Icon name={it.icon ?? "info"} />
+                    </button>
+                  )}
+                  <strong>{item(b, i, "title", `Destaque ${i + 1} — título`)}</strong>
+                </div>
                 {editing && iconFor === `${b.id}:${i}` && (
                   <IconPicker
                     value={it.icon}
                     onPick={(icon) => {
                       setIconFor(null);
-                      patch(b.id, { items: b.items!.map((x, j) => (j === i ? { ...x, icon } : x)) }, "Ícone");
+                      setItem(i, { icon }, "Ícone");
                     }}
                   />
                 )}
-                <strong>{item(b, i, "title", `Destaque ${i + 1} — título`)}</strong>
-                <span>{item(b, i, "text", `Destaque ${i + 1} — texto`)}</span>
-                {editing && (b.items?.length ?? 0) > 1 && (
-                  <button type="button" className="tpl-remove" aria-label={`Remover destaque ${i + 1}`} onClick={() => patch(b.id, { items: b.items!.filter((_, j) => j !== i) }, "Destaque removido")}>
+                {(editing || Boolean(it.text)) && <span className="ub-card-text">{item(b, i, "text", `Destaque ${i + 1} — texto`, "Descreva.")}</span>}
+                <ContactLinks links={it.links ?? []} max={6} onChange={(links, label) => setItem(i, { links }, label)} />
+                {editing && (
+                  <div className="ub-card-tools">
+                    <LogoTools logo={it.logo} onChange={(logo, label) => setItem(i, { logo }, label)} />
+                    {i > 0 && (
+                      <button type="button" className="ub-tool" aria-label={`Mover destaque ${i + 1} para a esquerda`} onClick={() => patch(b.id, { items: items.map((x, j) => (j === i - 1 ? items[i] : j === i ? items[i - 1] : x)) }, "Destaque movido")}>
+                        ←
+                      </button>
+                    )}
+                    {i < items.length - 1 && (
+                      <button type="button" className="ub-tool" aria-label={`Mover destaque ${i + 1} para a direita`} onClick={() => patch(b.id, { items: items.map((x, j) => (j === i + 1 ? items[i] : j === i ? items[i + 1] : x)) }, "Destaque movido")}>
+                        →
+                      </button>
+                    )}
+                    <button type="button" className="ub-tool" title="Duplicar este cartão (com logo e contatos)" disabled={items.length >= MAX_FEATURES} onClick={() => patch(b.id, { items: [...items.slice(0, i + 1), { ...it }, ...items.slice(i + 1)] }, "Destaque duplicado")}>
+                      Duplicar
+                    </button>
+                  </div>
+                )}
+                {editing && items.length > 1 && (
+                  <button type="button" className="tpl-remove" aria-label={`Remover destaque ${i + 1}`} onClick={() => patch(b.id, { items: items.filter((_, j) => j !== i) }, "Destaque removido")}>
                     ×
                   </button>
                 )}
               </li>
             ))}
-            {editing && (b.items?.length ?? 0) < 6 && (
+            {editing && items.length < MAX_FEATURES && (
               <li className="ub-add-item">
-                <button type="button" onClick={() => patch(b.id, { items: [...(b.items ?? []), { icon: "check", title: "Novo destaque", text: "Descreva." }] }, "Destaque adicionado")}>
+                <button type="button" onClick={() => patch(b.id, { items: [...items, { icon: items.at(-1)?.icon ?? "check", title: "Novo destaque", text: "Descreva." }] }, "Destaque adicionado")}>
                   + Destaque
                 </button>
               </li>
             )}
           </ul>
+        );
+      }
+      case "contacts":
+        return (
+          <ContactLinks
+            links={b.links ?? []}
+            list={b.style !== "icons"}
+            max={8}
+            onChange={(links, label) => (links.length ? patch(b.id, { links }, label) : removeBlock(b)())}
+          />
         );
       case "callout":
         return (
@@ -429,16 +865,16 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
               />
             )}
             <div>
-              <strong>{field(b, "title", "Chamada — título")}</strong>
-              <p>{field(b, "text", "Chamada — texto")}</p>
+              <strong>{field(b, "title", "Chamada — título", { removeWholeBlock: true })}</strong>
+              {(editing || Boolean(b.text)) && <p>{field(b, "text", "Chamada — texto", { optional: "Escreva aqui a mensagem em destaque." })}</p>}
             </div>
           </div>
         );
       case "quote":
         return (
           <blockquote className="ub-quote">
-            <p>{field(b, "text", "Citação")}</p>
-            <footer>{field(b, "author", "Autor da citação")}</footer>
+            <p>{field(b, "text", "Citação", { removeWholeBlock: true })}</p>
+            {(editing || Boolean(b.author)) && <footer>{field(b, "author", "Autor da citação", { optional: "Nome do cliente" })}</footer>}
           </blockquote>
         );
       case "stats":
@@ -478,19 +914,21 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
         </button>
         {menuAt === at && (
           <div className="ub-menu" role="menu">
-            {Object.entries(KIND_INFO).map(([kind, [name, icon]]) => (
-              <button
-                key={kind}
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuAt(null);
-                  set((l) => [...l.slice(0, at), newBlock(kind), ...l.slice(at)], `Bloco “${name}” inserido`);
-                }}
-              >
-                <Icon name={icon} /> {name}
-              </button>
-            ))}
+            {Object.entries(KIND_INFO).flatMap(([kind, [name, icon]]) =>
+              [{ key: kind, name, icon, make: () => newBlock(kind) }, ...PRESETS.filter((p) => p.after === kind).map((p) => ({ key: p.name, ...p }))].map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuAt(null);
+                    set((l) => [...l.slice(0, at), m.make(), ...l.slice(at)], `Bloco “${m.name}” inserido`);
+                  }}
+                >
+                  <Icon name={m.icon} /> {m.name}
+                </button>
+              )),
+            )}
           </div>
         )}
       </div>
@@ -528,13 +966,18 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
                     </button>
                   </>
                 )}
+                {b.kind === "contacts" && (
+                  <button type="button" onClick={() => patch(b.id, { style: b.style === "icons" ? "list" : "icons" }, "Estilo dos contatos")}>
+                    {b.style === "icons" ? "Com texto" : "Só ícones"}
+                  </button>
+                )}
                 <button type="button" disabled={i === 0} aria-label="Subir bloco" onClick={() => set((l) => { const n = [...l]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; }, "Bloco movido")}>
                   ↑
                 </button>
                 <button type="button" disabled={i === blocks.length - 1} aria-label="Descer bloco" onClick={() => set((l) => { const n = [...l]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; return n; }, "Bloco movido")}>
                   ↓
                 </button>
-                <button type="button" className="danger" disabled={blocks.length === 1} aria-label="Remover bloco" onClick={() => set((l) => l.filter((x) => x.id !== b.id), `Bloco “${KIND_INFO[b.kind]?.[0]}” removido`)}>
+                <button type="button" className="danger" aria-label="Remover bloco" onClick={() => set((l) => l.filter((x) => x.id !== b.id), `Bloco “${KIND_INFO[b.kind]?.[0]}” removido`)}>
                   ×
                 </button>
               </div>

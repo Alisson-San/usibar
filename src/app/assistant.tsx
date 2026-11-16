@@ -170,6 +170,15 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
             Restaurar
           </button>
         )}
+        {active.remove && (
+          <button
+            className="tt-remove"
+            title={`Remover “${active.label}” da página (você poderá recolocar depois)`}
+            onClick={() => active.remove?.()}
+          >
+            × Excluir
+          </button>
+        )}
         <button className={"tt-ai" + (panel === "ai" ? " on" : "")} aria-expanded={panel === "ai"} onClick={() => setPanel(panel === "ai" ? "none" : "ai")}>
           ✦ IA
         </button>
