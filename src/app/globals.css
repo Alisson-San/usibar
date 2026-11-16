@@ -4644,6 +4644,12 @@ div.removable {
 .removable:has(> .editable-box.is-active) > .remove-x {
   opacity: 1;
 }
+/* Touch screens have no hover: keep the "×" in sight while editing. */
+@media (hover: none) {
+  .remove-x {
+    opacity: 0.85;
+  }
+}
 .removed-slot {
   display: inline-block;
   vertical-align: middle;
@@ -6106,10 +6112,10 @@ div.removed-slot {
   gap: 5px;
   max-width: calc(100% - 50px);
 }
-@media (max-width: 640px) {
-  .editing .origin-image .image-caption {
-    bottom: 66px;
-  }
+/* While editing, captions over a photo sit above its "Ajustar / Trocar foto" buttons, so the
+   caption text and its "×" stay reachable at any width. */
+.editing :has(> .image-swap-group) > .image-caption {
+  bottom: 66px;
 }
 
 .origin-copy .removable + .removable {
