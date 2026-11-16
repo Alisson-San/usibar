@@ -2,7 +2,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { authFetch } from "@/lib/browser-auth";
-import { cleanTextStyle, CopyContext, type TextAlign, type TextStyle } from "./copy";
+import { cleanTextStyle, CopyContext, POS_LOCK, type TextAlign, type TextStyle } from "./copy";
 
 // Brand colours first; the picker covers anything else.
 const SWATCHES: [string, string][] = [
@@ -90,6 +90,7 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
   const hasAny = Boolean(style.color || style.size || style.width !== undefined || style.align || style.x !== undefined || style.y !== undefined);
   const hasBox = Boolean(style.width !== undefined || style.align || style.x !== undefined || style.y !== undefined);
   const inInteractive = Boolean(active.el.parentElement?.closest("a, button"));
+  const posLocked = Boolean(active.el.closest(POS_LOCK));
   const apply = (next: TextStyle) => {
     const cleaned = cleanTextStyle({ ...next, size: next.size ? round(next.size) : undefined });
     setStyle(active.key, cleaned, active.label);
@@ -217,7 +218,10 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
               ))}
             </div>
           </div>
-          {!inInteractive && (
+          {posLocked && (
+            <p className="tiny-mono tt-note">Dentro de um cartão o texto acompanha o cartão; use a largura e o alinhamento.</p>
+          )}
+          {!inInteractive && !posLocked && (
             <div className="tt-layout-row">
               <span className="tiny-mono">Posição responsiva</span>
               <div className="tt-actions">
