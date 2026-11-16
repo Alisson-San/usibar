@@ -264,7 +264,7 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
             </OptionalSlot>
           </div>
           <figure className="tpl-figure">
-            <img src={String(d.imageUrl ?? "")} alt="" loading="lazy" />
+            <img src={String(d.imageUrl ?? "")} alt={String(d.title ?? d.eyebrow ?? "")} loading="lazy" />
             <span className="image-bracket tl" />
             <span className="image-bracket br" />
             <ImageSwap src={String(d.imageUrl ?? "")} label="foto" onChange={(url) => update(block.id, (x) => ({ ...x, imageUrl: url }), "Foto da seção")} />
@@ -787,7 +787,7 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
               <li key={i} data-pos-lock="">
                 <div className="ub-card-head">
                   {it.logo ? (
-                    <img className="ub-logo" src={it.logo} alt="" loading="lazy" />
+                    <img className="ub-logo" src={it.logo} alt={`Logo ${it.title ?? ""}`.trim()} loading="lazy" />
                   ) : (
                     <button type="button" className="ub-icon" disabled={!editing} onClick={() => setIconFor(iconFor === `${b.id}:${i}` ? null : `${b.id}:${i}`)} aria-label="Trocar ícone">
                       <Icon name={it.icon ?? "info"} />
