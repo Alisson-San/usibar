@@ -579,6 +579,7 @@ export function EditBar({
             <li>“✦ Assistente IA” abre um chat: peça em palavras (mover seções, trocar fotos, cadastrar peças…) e aplique com um clique.</li>
             <li>Cada seção tem controles para subir, descer, ocultar ou excluir; “+ Inserir seção” adiciona novas, inclusive a “Seção livre”, montada com blocos.</li>
             <li>Textos e botões com “×” podem ser removidos e recolocados depois.</li>
+            <li>Cartões de “Destaques” (representantes, equipe…): cada cartão tem “+ Logo” (logo pequena antes do nome), “+ Contato” (WhatsApp, e-mail, telefone, site ou Instagram, mostrados como ícones clicáveis), setas para reordenar e “Duplicar”.</li>
             <li>“Aviso” agenda uma mensagem ao abrir o site, como férias coletivas.</li>
             <li>Fotos: ao carregar uma nova imagem ou clicar em “Ajustar”, o editor permite redimensionar, recortar, nivelar o ângulo e remover o fundo branco.</li>
             <li>Peças: clique no cartão para editar; “+ Nova peça” para cadastrar.</li>
