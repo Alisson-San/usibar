@@ -394,7 +394,7 @@ export function Solutions({
                       </Removable>
                     </span>
                   )}
-                  <img src={s.imageUrl} alt="" loading="lazy" />
+                  <img src={s.imageUrl} alt={`${s.title} — Usibar`} loading="lazy" />
                   <i className="dim dim-x" aria-hidden="true" />
                   <i className="dim dim-y" aria-hidden="true" />
                   <ImageSwap

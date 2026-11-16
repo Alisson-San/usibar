@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import seed from "../../data/db.json";
+import { siteUrl } from "@/lib/seo";
 
 // Fontes hospedadas no próprio repositório (subconjunto latin, fontes variáveis),
 // para o build não depender do Google Fonts estar respondendo.
@@ -24,16 +24,11 @@ const mono = localFont({
   display: "swap",
 });
 
-const c = seed.company;
-const description =
-  "Cilindros hidráulicos de simples e dupla ação, blocos hidráulicos (manifolds) e usinagem CNC sob medida. Mais de 20 anos de experiência, em Barão/RS.";
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
+// Defaults for every page; the home page builds its own title, description and structured data
+// from the published content (src/lib/seo.ts).
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Usibar Usinagens Especiais | Cilindros e blocos hidráulicos sob medida — Barão/RS",
-  description,
+  title: "Usibar Usinagens Especiais",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml", sizes: "any" },
@@ -42,33 +37,8 @@ export const metadata: Metadata = {
     shortcut: "/favicon.ico",
     apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
   },
-  openGraph: {
-    title: "Usibar — Tecnologia em hidráulica",
-    description,
-    type: "website",
-    locale: "pt_BR",
-    images: [{ url: "/assets/hero-bench.webp", alt: "Cilindros hidráulicos fabricados pela Usibar" }],
-  },
 };
-// Structured data from the published catalog, so search engines read the real contacts.
-const organization = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: c.name,
-  slogan: c.motto,
-  description,
-  email: c.email,
-  telephone: "+" + c.whatsapp,
-  address: {
-    "@type": "PostalAddress",
-    streetAddress: "Rua Martin Biancho, 803 — Bairro Bela Vista",
-    addressLocality: "Barão",
-    addressRegion: "RS",
-    postalCode: "95730-000",
-    addressCountry: "BR",
-  },
-  sameAs: c.socials?.map((s) => s.url) ?? [`https://instagram.com/${c.instagram}`],
-};
+export const viewport: Viewport = { themeColor: "#292c27" };
 
 export default function RootLayout({
   children,
@@ -96,10 +66,6 @@ export default function RootLayout({
             </filter>
           </defs>
         </svg>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
-        />
         {children}
       </body>
     </html>

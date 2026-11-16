@@ -116,6 +116,23 @@ Credenciais, uploads locais, dependências, ferramentas e builds estão excluíd
 
 Nenhum repositório remoto ou deployment foi criado nesta preparação.
 
+## Google e buscas (SEO)
+
+O que o código já faz:
+- **Página pronta no HTML:** a página é montada no servidor a cada visita (`src/app/page.tsx`), com textos, seções, catálogo e contatos. Antes ela chegava vazia ("Preparando a apresentação") e só era preenchida no navegador. O que o administrador edita aparece no HTML na hora.
+- **Título e descrição:** mostrados no resultado da busca, montados com o nome, a cidade e os anos de experiência cadastrados (`src/lib/seo.ts`). A página também tem endereço canônico e a imagem de compartilhamento `public/og-usibar.jpg` (1200×630), usada por Google, WhatsApp e redes sociais.
+- **Dados estruturados (schema.org):** `LocalBusiness` com nome, logo (`public/logo-usibar.png`), endereço, telefone, e-mail, Instagram, serviços e áreas de atuação, mais `WebSite` e `WebPage`. Também são gerados com o conteúdo publicado.
+- **`/robots.txt` e `/sitemap.xml`:** o sitemap inclui as fotos do catálogo. O /admin e a API ficam fora do Google, assim como as prévias da Vercel.
+- **Textos alternativos:** fotos de peças, soluções e seções têm texto alternativo, o que ajuda no Google Imagens. Sem JavaScript, a página aparece direto, sem a abertura animada.
+
+O que depende dos donos do site (é o que mais pesa para aparecer em buscas como "cilindro hidráulico Barão RS"):
+1. **Perfil da Empresa no Google** (business.google.com): cadastrar ou reivindicar a Usibar com o mesmo nome, endereço e telefone do site, a categoria principal mais próxima do negócio (busque por "hidráulic" e "usinagem" na lista de categorias), horário, fotos da fábrica e o link do site. Pedir avaliações de clientes. É o que coloca a empresa no mapa e no quadro lateral da busca.
+2. **Domínio próprio:** apontar `usibar.com.br` (ou `www.`) para o projeto na Vercel (Settings → Domains) e definir `NEXT_PUBLIC_SITE_URL` com esse endereço.
+3. **Google Search Console** (search.google.com/search-console): adicionar o site, verificar pela "tag HTML" colocando o código em `GOOGLE_SITE_VERIFICATION` na Vercel e publicar de novo. Depois, enviar `/sitemap.xml`. O mesmo vale para o Bing Webmaster Tools, com `BING_SITE_VERIFICATION`.
+4. **Conteúdo:** manter o catálogo com fotos e descrições, e usar seções livres para aplicações e segmentos (ex.: "Cilindros para elevadores hidráulicos"), com os termos que os clientes buscam. Instagram e diretórios do setor com link para o site também ajudam.
+
+Para conferir: teste de resultados aprimorados (search.google.com/test/rich-results) e validador do schema.org (validator.schema.org).
+
 ## Fluxo de branches
 
 `main` é produção (domínio oficial na Vercel) e `develop` é o ambiente de testes. Alterações saem de branches `feature/…` para a `develop` e, aprovadas, vão da `develop` para a `main`. O CI (`.github/workflows/ci.yml`) roda testes, tipos e build em cada PR. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).
