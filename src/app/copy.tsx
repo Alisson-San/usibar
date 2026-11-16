@@ -81,6 +81,9 @@ export const CopyContext = createContext<CopyCtx>({
   activate: () => {},
 });
 
+/** Containers whose texts keep their place in the layout (no free x/y position). */
+export const POS_LOCK = "[data-pos-lock]";
+
 export const styleOf = (s?: TextStyle): React.CSSProperties | undefined =>
   s && (s.color || s.size || s.align)
     ? {
@@ -174,7 +177,7 @@ export function Editable({
     const el = boxRef.current;
     const inChrome = Boolean(el.closest("foreignObject, .block-bar, .site-header, .wa-float"));
     const inInteractive = Boolean(el.parentElement?.closest("a, button"));
-    setHandles({ resize: !inChrome, move: !inChrome && !inInteractive });
+    setHandles({ resize: !inChrome, move: !inChrome && !inInteractive && !el.closest(POS_LOCK) });
   }, [editing, styleKey]);
 
   // Responsively compute width and anchor-ratio (x, y) translation on every resolution/resize.
@@ -193,6 +196,11 @@ export function Editable({
     const host = box.closest<HTMLElement>("section, footer");
     if (!host) return;
 
+    // Inside a card (features, numbers…) a text follows its card: a position saved against the
+    // whole section would drift whenever the cards reflow (edit chrome, screen width, more cards).
+    const locked = Boolean(box.closest(POS_LOCK));
+    const ex = locked ? undefined : eff.x;
+    const ey = locked ? undefined : eff.y;
     const sync = () => {
       const sw = host.clientWidth;
       const sh = host.clientHeight;
@@ -210,24 +218,24 @@ export function Editable({
       }
       box.style.textAlign = eff.align ?? "";
 
-      if (eff.x !== undefined || eff.y !== undefined || eff.width !== undefined) {
+      if (ex !== undefined || ey !== undefined || eff.width !== undefined) {
         const bw = box.offsetWidth;
         const bh = box.offsetHeight;
         const nat = naturalBoxInHost(box, host);
         const availW = Math.max(0, sw - pad * 2 - bw);
         const availH = Math.max(0, sh - pad * 2 - bh);
         let dx = 0;
-        if (eff.x !== undefined) {
-          dx = r1(pad + (eff.x / 100) * availW - nat.left);
+        if (ex !== undefined) {
+          dx = r1(pad + (ex / 100) * availW - nat.left);
         } else if (eff.width !== undefined) {
           if (nat.left + bw > sw - pad) dx = r1(sw - pad - (nat.left + bw));
           if (nat.left + dx < pad) dx = r1(pad - nat.left);
         }
-        const dy = eff.y !== undefined ? r1(pad + (eff.y / 100) * availH - nat.top) : 0;
-        if (dx !== 0 || dy !== 0 || eff.x !== undefined || eff.y !== undefined) {
+        const dy = ey !== undefined ? r1(pad + (ey / 100) * availH - nat.top) : 0;
+        if (dx !== 0 || dy !== 0 || ex !== undefined || ey !== undefined) {
           box.style.translate = `${dx}px ${dy}px`;
           box.style.position = "relative";
-          box.style.zIndex = eff.x !== undefined || eff.y !== undefined ? "15" : "5";
+          box.style.zIndex = ex !== undefined || ey !== undefined ? "15" : "5";
         } else {
           box.style.translate = "";
           box.style.position = "";
