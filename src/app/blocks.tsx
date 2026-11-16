@@ -3,6 +3,7 @@ import { useContext, useRef, useState } from "react";
 import { Icon, IconPicker } from "./icons";
 import { CopyContext, Editable, ImageSwap, Removable, RemovableContext, T } from "./copy";
 import { useModal } from "./editing";
+import { CONTACT_HINTS, CONTACT_NAMES, CONTACT_TYPES, MAX_FEATURES, contactHref, contactText, normalizeContact } from "@/lib/site-actions.mjs";
 
 // The page between the hero and the footer is an ordered list of sections. Built-in sections
 // keep their own content (catalog, process…); new sections come from templates and carry
@@ -454,7 +455,9 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
 }
 
 // ---- Free section: a column of blocks, WordPress style ------------------------------------------
-type UBlock = { id: string; kind: string; text?: string; title?: string; author?: string; size?: string; link?: string; style?: string; icon?: string; url?: string; caption?: string; items?: { icon?: string; title?: string; text?: string; value?: string; label?: string }[] };
+type Contact = { type: string; value: string };
+type UItem = { icon?: string; title?: string; text?: string; value?: string; label?: string; logo?: string; links?: Contact[] };
+type UBlock = { id: string; kind: string; text?: string; title?: string; author?: string; size?: string; link?: string; style?: string; icon?: string; url?: string; caption?: string; items?: UItem[]; links?: Contact[] };
 const KIND_INFO: Record<string, [string, string]> = {
   label: ["Rótulo", "documento"],
   heading: ["Título", "estrela"],
@@ -465,8 +468,21 @@ const KIND_INFO: Record<string, [string, string]> = {
   callout: ["Chamada com ícone", "alerta"],
   quote: ["Citação", "pessoas"],
   stats: ["Números", "check"],
+  contacts: ["Contatos (WhatsApp, e-mail…)", "telefone"],
   divider: ["Divisória", "ferramenta"],
 };
+// Ready-made starting points in the "+ Bloco" menu, besides the plain kinds.
+const PRESETS: { name: string; icon: string; after: string; make: () => UBlock }[] = [
+  {
+    name: "Cartões de contato (representantes, equipe)",
+    icon: "pessoas",
+    after: "features",
+    make: () =>
+      newBlock("features", {
+        items: [1, 2, 3].map((n) => ({ icon: "pessoas", title: `Nome ${n}`, text: "Região atendida" })),
+      }),
+  },
+];
 const blockId = () => crypto.randomUUID().replace(/-/g, "").slice(0, 10);
 export function newBlock(kind: string, extra: Partial<UBlock> = {}): UBlock {
   const base: Record<string, Partial<UBlock>> = {
@@ -485,6 +501,7 @@ export function newBlock(kind: string, extra: Partial<UBlock> = {}): UBlock {
     callout: { icon: "info", title: "Atenção", text: "Escreva aqui a mensagem em destaque." },
     quote: { text: "Escreva aqui o depoimento.", author: "Nome do cliente" },
     stats: { items: [{ value: "20+", label: "anos de experiência" }, { value: "6", label: "segmentos atendidos" }] },
+    contacts: { links: [{ type: "email", value: "contato@empresa.com.br" }], style: "list" },
     divider: {},
   };
   return { id: blockId(), kind, ...base[kind], ...extra };
@@ -494,6 +511,176 @@ const LINKS: [string, string][] = [
   ["#pecas", "Catálogo"],
   ["whatsapp", "WhatsApp"],
 ];
+
+/* Contacts as small round icons (or icon + text). While editing, each one opens a little form
+   to change or remove it, and "+ Contato" adds another. */
+function ContactLinks({
+  links,
+  list = false,
+  max,
+  onChange,
+}: {
+  links: Contact[];
+  list?: boolean;
+  max: number;
+  onChange: (links: Contact[], label: string) => void;
+}) {
+  const { editing } = useContext(CopyContext);
+  const [open, setOpen] = useState<number | null>(null); // index, or links.length for a new one
+  if (!links.length && !editing) return null;
+  return (
+    <div className="ub-contacts-wrap">
+      <ul className={`ub-contacts${list ? " is-list" : ""}`}>
+        {links.map((l, i) => {
+          const text = contactText(l);
+          const external = l.type === "whatsapp" || l.type === "site" || l.type === "instagram";
+          return (
+            <li key={i}>
+              <a
+                href={contactHref(l)}
+                {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+                title={`${CONTACT_NAMES[l.type as keyof typeof CONTACT_NAMES]}: ${text}${editing ? " — clique para alterar" : ""}`}
+                aria-label={`${CONTACT_NAMES[l.type as keyof typeof CONTACT_NAMES]}: ${text}`}
+                onClick={(e) => {
+                  if (!editing) return;
+                  e.preventDefault();
+                  setOpen(open === i ? null : i);
+                }}
+              >
+                <span className="ub-contact-ico">
+                  <Icon name={l.type} />
+                </span>
+                {list && <span className="ub-contact-text">{text}</span>}
+              </a>
+            </li>
+          );
+        })}
+        {editing && links.length < max && (
+          <li>
+            <button type="button" className="ub-contact-add" onClick={() => setOpen(open === links.length ? null : links.length)}>
+              + Contato
+            </button>
+          </li>
+        )}
+      </ul>
+      {editing && open !== null && (
+        <ContactForm
+          key={open}
+          initial={links[open]}
+          onCancel={() => setOpen(null)}
+          onSave={(c) => {
+            setOpen(null);
+            if (open < links.length) onChange(links.map((x, j) => (j === open ? c : x)), "Contato alterado");
+            else onChange([...links, c], `${CONTACT_NAMES[c.type as keyof typeof CONTACT_NAMES]} adicionado`);
+          }}
+          onRemove={
+            open < links.length
+              ? () => {
+                  setOpen(null);
+                  onChange(links.filter((_, j) => j !== open), "Contato removido");
+                }
+              : undefined
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function ContactForm({ initial, onSave, onRemove, onCancel }: { initial?: Contact; onSave: (c: Contact) => void; onRemove?: () => void; onCancel: () => void }) {
+  const [type, setType] = useState(initial?.type ?? "whatsapp");
+  const [value, setValue] = useState(initial ? contactText(initial) : "");
+  const [error, setError] = useState("");
+  const save = () => {
+    const v = normalizeContact(type, value);
+    if (!v) return setError(`Confira o ${CONTACT_NAMES[type as keyof typeof CONTACT_NAMES]}: ex. ${CONTACT_HINTS[type as keyof typeof CONTACT_HINTS]}`);
+    onSave({ type, value: v });
+  };
+  return (
+    <div
+      className="ub-contact-form"
+      role="dialog"
+      aria-label={initial ? "Alterar contato" : "Novo contato"}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onCancel();
+      }}
+    >
+      <div className="ub-contact-types" role="radiogroup" aria-label="Tipo de contato">
+        {CONTACT_TYPES.map((t) => (
+          <button key={t} type="button" role="radio" aria-checked={t === type} className={t === type ? "on" : ""} onClick={() => (setType(t), setError(""))}>
+            <Icon name={t} /> {CONTACT_NAMES[t as keyof typeof CONTACT_NAMES]}
+          </button>
+        ))}
+      </div>
+      <input
+        autoFocus
+        value={value}
+        placeholder={CONTACT_HINTS[type as keyof typeof CONTACT_HINTS]}
+        aria-label={CONTACT_NAMES[type as keyof typeof CONTACT_NAMES]}
+        inputMode={type === "whatsapp" || type === "telefone" ? "tel" : type === "email" ? "email" : "url"}
+        onChange={(e) => (setValue(e.target.value), setError(""))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            save();
+          }
+        }}
+      />
+      {error && <p className="ub-contact-error">{error}</p>}
+      <div className="ub-contact-actions">
+        <button type="button" className="primary" onClick={save}>
+          {initial ? "Salvar" : "Adicionar"}
+        </button>
+        {onRemove && (
+          <button type="button" className="danger" onClick={onRemove}>
+            Remover
+          </button>
+        )}
+        <button type="button" onClick={onCancel}>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* The small logo at the start of a card's name; in edit mode, add / adjust / swap / remove it. */
+function LogoTools({ logo, onChange }: { logo?: string; onChange: (url: string | undefined, label: string) => void }) {
+  const { openPhotoEditor } = useContext(CopyContext);
+  const pick = (
+    <input
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      className="sr-only"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        e.target.value = "";
+        if (file) openPhotoEditor(file, { label: "logo", onSave: (url) => onChange(url, logo ? "Logo trocada" : "Logo adicionada") });
+      }}
+    />
+  );
+  if (!logo)
+    return (
+      <label className="ub-tool" title="Uma logo pequena no início do nome, no lugar do ícone">
+        + Logo
+        {pick}
+      </label>
+    );
+  return (
+    <>
+      <button type="button" className="ub-tool" onClick={() => openPhotoEditor(logo, { label: "logo", onSave: (url) => onChange(url, "Logo ajustada") })}>
+        Ajustar logo
+      </button>
+      <label className="ub-tool">
+        Trocar logo
+        {pick}
+      </label>
+      <button type="button" className="ub-tool danger" onClick={() => onChange(undefined, "Logo removida")}>
+        Tirar logo
+      </button>
+    </>
+  );
+}
 
 function FreeSection({ block, num, update, whatsapp }: { block: Block; num: string; update: Update; whatsapp: (text: string) => string }) {
   const { editing } = useContext(CopyContext);
@@ -589,40 +776,78 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
             {(b.caption || editing) && <figcaption>{field(b, "caption", "Legenda da foto", { optional: "Legenda da foto" })}</figcaption>}
           </figure>
         );
-      case "features":
+      case "features": {
+        const items = b.items ?? [];
+        const setItem = (i: number, p: Partial<UItem>, label: string) =>
+          patch(b.id, { items: items.map((x, j) => (j === i ? Object.fromEntries(Object.entries({ ...x, ...p }).filter(([, v]) => v !== undefined && !(Array.isArray(v) && !v.length))) : x)) }, label);
         return (
           <ul className="ub-features">
-            {(b.items ?? []).map((it, i) => (
+            {items.map((it, i) => (
               <li key={i}>
-                <button type="button" className="ub-icon" disabled={!editing} onClick={() => setIconFor(iconFor === `${b.id}:${i}` ? null : `${b.id}:${i}`)} aria-label="Trocar ícone">
-                  <Icon name={it.icon ?? "info"} />
-                </button>
+                <div className="ub-card-head">
+                  {it.logo ? (
+                    <img className="ub-logo" src={it.logo} alt="" loading="lazy" />
+                  ) : (
+                    <button type="button" className="ub-icon" disabled={!editing} onClick={() => setIconFor(iconFor === `${b.id}:${i}` ? null : `${b.id}:${i}`)} aria-label="Trocar ícone">
+                      <Icon name={it.icon ?? "info"} />
+                    </button>
+                  )}
+                  <strong>{item(b, i, "title", `Destaque ${i + 1} — título`)}</strong>
+                </div>
                 {editing && iconFor === `${b.id}:${i}` && (
                   <IconPicker
                     value={it.icon}
                     onPick={(icon) => {
                       setIconFor(null);
-                      patch(b.id, { items: b.items!.map((x, j) => (j === i ? { ...x, icon } : x)) }, "Ícone");
+                      setItem(i, { icon }, "Ícone");
                     }}
                   />
                 )}
-                <strong>{item(b, i, "title", `Destaque ${i + 1} — título`)}</strong>
-                {(editing || Boolean(it.text)) && <span>{item(b, i, "text", `Destaque ${i + 1} — texto`, "Descreva.")}</span>}
-                {editing && (b.items?.length ?? 0) > 1 && (
-                  <button type="button" className="tpl-remove" aria-label={`Remover destaque ${i + 1}`} onClick={() => patch(b.id, { items: b.items!.filter((_, j) => j !== i) }, "Destaque removido")}>
+                {(editing || Boolean(it.text)) && <span className="ub-card-text">{item(b, i, "text", `Destaque ${i + 1} — texto`, "Descreva.")}</span>}
+                <ContactLinks links={it.links ?? []} max={6} onChange={(links, label) => setItem(i, { links }, label)} />
+                {editing && (
+                  <div className="ub-card-tools">
+                    <LogoTools logo={it.logo} onChange={(logo, label) => setItem(i, { logo }, label)} />
+                    {i > 0 && (
+                      <button type="button" className="ub-tool" aria-label={`Mover destaque ${i + 1} para a esquerda`} onClick={() => patch(b.id, { items: items.map((x, j) => (j === i - 1 ? items[i] : j === i ? items[i - 1] : x)) }, "Destaque movido")}>
+                        ←
+                      </button>
+                    )}
+                    {i < items.length - 1 && (
+                      <button type="button" className="ub-tool" aria-label={`Mover destaque ${i + 1} para a direita`} onClick={() => patch(b.id, { items: items.map((x, j) => (j === i + 1 ? items[i] : j === i ? items[i + 1] : x)) }, "Destaque movido")}>
+                        →
+                      </button>
+                    )}
+                    <button type="button" className="ub-tool" title="Duplicar este cartão (com logo e contatos)" disabled={items.length >= MAX_FEATURES} onClick={() => patch(b.id, { items: [...items.slice(0, i + 1), { ...it }, ...items.slice(i + 1)] }, "Destaque duplicado")}>
+                      Duplicar
+                    </button>
+                  </div>
+                )}
+                {editing && items.length > 1 && (
+                  <button type="button" className="tpl-remove" aria-label={`Remover destaque ${i + 1}`} onClick={() => patch(b.id, { items: items.filter((_, j) => j !== i) }, "Destaque removido")}>
                     ×
                   </button>
                 )}
               </li>
             ))}
-            {editing && (b.items?.length ?? 0) < 6 && (
+            {editing && items.length < MAX_FEATURES && (
               <li className="ub-add-item">
-                <button type="button" onClick={() => patch(b.id, { items: [...(b.items ?? []), { icon: "check", title: "Novo destaque", text: "Descreva." }] }, "Destaque adicionado")}>
+                <button type="button" onClick={() => patch(b.id, { items: [...items, { icon: items.at(-1)?.icon ?? "check", title: "Novo destaque", text: "Descreva." }] }, "Destaque adicionado")}>
                   + Destaque
                 </button>
               </li>
             )}
           </ul>
+        );
+      }
+      case "contacts":
+        return (
+          <ContactLinks
+            links={b.links ?? []}
+            list={b.style !== "icons"}
+            max={8}
+            onChange={(links, label) => (links.length ? patch(b.id, { links }, label) : removeBlock(b)())}
+          />
         );
       case "callout":
         return (
@@ -689,19 +914,21 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
         </button>
         {menuAt === at && (
           <div className="ub-menu" role="menu">
-            {Object.entries(KIND_INFO).map(([kind, [name, icon]]) => (
-              <button
-                key={kind}
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuAt(null);
-                  set((l) => [...l.slice(0, at), newBlock(kind), ...l.slice(at)], `Bloco “${name}” inserido`);
-                }}
-              >
-                <Icon name={icon} /> {name}
-              </button>
-            ))}
+            {Object.entries(KIND_INFO).flatMap(([kind, [name, icon]]) =>
+              [{ key: kind, name, icon, make: () => newBlock(kind) }, ...PRESETS.filter((p) => p.after === kind).map((p) => ({ key: p.name, ...p }))].map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuAt(null);
+                    set((l) => [...l.slice(0, at), m.make(), ...l.slice(at)], `Bloco “${m.name}” inserido`);
+                  }}
+                >
+                  <Icon name={m.icon} /> {m.name}
+                </button>
+              )),
+            )}
           </div>
         )}
       </div>
@@ -738,6 +965,11 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
                       {b.style === "ghost" ? "Cheio" : "Contorno"}
                     </button>
                   </>
+                )}
+                {b.kind === "contacts" && (
+                  <button type="button" onClick={() => patch(b.id, { style: b.style === "icons" ? "list" : "icons" }, "Estilo dos contatos")}>
+                    {b.style === "icons" ? "Com texto" : "Só ícones"}
+                  </button>
                 )}
                 <button type="button" disabled={i === 0} aria-label="Subir bloco" onClick={() => set((l) => { const n = [...l]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; }, "Bloco movido")}>
                   ↑

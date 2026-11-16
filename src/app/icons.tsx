@@ -83,6 +83,19 @@ const paths: Record<string, React.ReactNode> = {
     </>
   ),
   documento: <path d="M6 2.8h8l4.5 4.5v13.9H6zM14 2.8v4.5h4.5M9 12h6.5M9 15.5h6.5M9 8.5h2.5" />,
+  site: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" />
+    </>
+  ),
+  instagram: (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="M17 7v.1" />
+    </>
+  ),
 };
 export const ICON_LABELS: Record<string, string> = {
   info: "Informação",
@@ -105,6 +118,8 @@ export const ICON_LABELS: Record<string, string> = {
   raio: "Rapidez",
   pessoas: "Equipe",
   documento: "Documento",
+  site: "Site",
+  instagram: "Instagram",
 };
 export const ICONS = Object.keys(paths);
 
