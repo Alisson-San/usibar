@@ -459,7 +459,7 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
 // ---- Free section: a column of blocks, WordPress style ------------------------------------------
 type Contact = { type: string; value: string };
 type UItem = { icon?: string; title?: string; text?: string; value?: string; label?: string; logo?: string; logoSize?: number; links?: Contact[] };
-type UBlock = { id: string; kind: string; text?: string; title?: string; author?: string; size?: string; link?: string; style?: string; icon?: string; url?: string; caption?: string; items?: UItem[]; links?: Contact[] };
+type UBlock = { id: string; kind: string; look?: string; cols?: string; head?: string; contactLook?: string; pin?: string; text?: string; title?: string; author?: string; size?: string; link?: string; style?: string; icon?: string; url?: string; caption?: string; items?: UItem[]; links?: Contact[] };
 const KIND_INFO: Record<string, [string, string]> = {
   label: ["Rótulo", "documento"],
   heading: ["Título", "estrela"],
@@ -473,6 +473,17 @@ const KIND_INFO: Record<string, [string, string]> = {
   contacts: ["Contatos (WhatsApp, e-mail…)", "telefone"],
   divider: ["Divisória", "ferramenta"],
 };
+// The look recommended for representatives, team or branches: light cards, logo above the name,
+// region with a map pin and contacts as named buttons. One click in "Aparência" applies it.
+const REP_LOOK = { look: "cards", cols: "3", head: "top", contactLook: "buttons", pin: "on" } as const;
+// Appearance options of a "features" block, shown in its "Aparência" panel.
+const LOOK_OPTIONS: { key: "look" | "cols" | "head" | "contactLook" | "pin"; label: string; options: [string | undefined, string][] }[] = [
+  { key: "look", label: "Estilo", options: [[undefined, "Linhas"], ["cards", "Cartões"], ["dark", "Escuro"]] },
+  { key: "cols", label: "Colunas", options: [[undefined, "Auto"], ["2", "2"], ["3", "3"], ["4", "4"]] },
+  { key: "head", label: "Logo ou ícone", options: [[undefined, "Ao lado do nome"], ["top", "Acima do nome"]] },
+  { key: "contactLook", label: "Contatos", options: [[undefined, "Só ícones"], ["buttons", "Botões com nome"], ["list", "Com número/e-mail"]] },
+  { key: "pin", label: "Ícone de local no texto", options: [[undefined, "Não"], ["on", "Sim"]] },
+];
 // Ready-made starting points in the "+ Bloco" menu, besides the plain kinds.
 const PRESETS: { name: string; icon: string; after: string; make: () => UBlock }[] = [
   {
@@ -481,6 +492,7 @@ const PRESETS: { name: string; icon: string; after: string; make: () => UBlock }
     after: "features",
     make: () =>
       newBlock("features", {
+        ...REP_LOOK,
         items: [1, 2, 3].map((n) => ({ icon: "pessoas", title: `Nome ${n}`, text: "Região atendida" })),
       }),
   },
@@ -518,12 +530,13 @@ const LINKS: [string, string][] = [
    to change or remove it, and "+ Contato" adds another. */
 function ContactLinks({
   links,
-  list = false,
+  mode = "icons",
   max,
   onChange,
 }: {
   links: Contact[];
-  list?: boolean;
+  /** icons: round icons; buttons: icon + "WhatsApp", "E-mail"…; list: icon + the number or address. */
+  mode?: "icons" | "buttons" | "list";
   max: number;
   onChange: (links: Contact[], label: string) => void;
 }) {
@@ -532,7 +545,7 @@ function ContactLinks({
   if (!links.length && !editing) return null;
   return (
     <div className="ub-contacts-wrap">
-      <ul className={`ub-contacts${list ? " is-list" : ""}`}>
+      <ul className={`ub-contacts${mode === "list" ? " is-list" : mode === "buttons" ? " is-buttons" : ""}`}>
         {links.map((l, i) => {
           const text = contactText(l);
           const external = l.type === "whatsapp" || l.type === "site" || l.type === "instagram";
@@ -552,7 +565,8 @@ function ContactLinks({
                 <span className="ub-contact-ico">
                   <Icon name={l.type} />
                 </span>
-                {list && <span className="ub-contact-text">{text}</span>}
+                {mode === "list" && <span className="ub-contact-text">{text}</span>}
+                {mode === "buttons" && <span className="ub-contact-text">{CONTACT_NAMES[l.type as keyof typeof CONTACT_NAMES]}</span>}
               </a>
             </li>
           );
@@ -646,6 +660,42 @@ function ContactForm({ initial, onSave, onRemove, onCancel }: { initial?: Contac
   );
 }
 
+/* "Aparência" of a cards block: style, columns, logo position, contacts and the map pin. Each
+   choice is published at once (and can be undone); "Modelo: representantes" sets them all. */
+function LookPanel({ block, onSet }: { block: UBlock; onSet: (p: Partial<UBlock>, label: string) => void }) {
+  const isRep = Object.entries(REP_LOOK).every(([k, v]) => block[k as keyof UBlock] === v);
+  return (
+    <div className="ub-look" role="group" aria-label="Aparência dos cartões">
+      {LOOK_OPTIONS.map(({ key, label, options }) => (
+        <div key={key} className="ub-look-row">
+          <span className="tiny-mono">{label}</span>
+          <div className="ub-seg" role="radiogroup" aria-label={label}>
+            {options.map(([v, name]) => {
+              const on = (block[key] ?? undefined) === v;
+              return (
+                <button key={name} type="button" role="radio" aria-checked={on} className={on ? "on" : ""} onClick={() => !on && onSet({ [key]: v }, `${label}: ${name}`)}>
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <div className="ub-look-row">
+        <span className="tiny-mono">Modelos</span>
+        <div className="ub-seg">
+          <button type="button" className={isRep ? "on" : ""} onClick={() => onSet({ ...REP_LOOK }, "Modelo de representantes aplicado")}>
+            Representantes
+          </button>
+          <button type="button" onClick={() => onSet({ look: undefined, cols: undefined, head: undefined, contactLook: undefined, pin: undefined }, "Aparência padrão")}>
+            Padrão (linhas)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* The small logo at the start of a card's name; in edit mode, add / adjust / swap / remove it. */
 function LogoTools({ logo, onChange }: { logo?: string; onChange: (url: string | undefined, label: string) => void }) {
   const { openPhotoEditor } = useContext(CopyContext);
@@ -688,6 +738,7 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
   const { editing } = useContext(CopyContext);
   const [menuAt, setMenuAt] = useState<number | null>(null);
   const [iconFor, setIconFor] = useState<string | null>(null);
+  const [lookFor, setLookFor] = useState<string | null>(null);
   const blocks = (block.data?.blocks as UBlock[]) ?? [];
   const set = (change: (l: UBlock[]) => UBlock[], label: string) => update(block.id, (d) => ({ ...d, blocks: change((d.blocks as UBlock[]) ?? []) }), label);
   const patch = (id: string, p: Partial<UBlock>, label: string) => set((l) => l.map((b) => (b.id === id ? { ...b, ...p } : b)), label);
@@ -784,7 +835,7 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
           patch(b.id, { items: items.map((x, j) => (j === i ? Object.fromEntries(Object.entries({ ...x, ...p }).filter(([, v]) => v !== undefined && !(Array.isArray(v) && !v.length))) : x)) }, label);
         return (
           <>
-          <ul className="ub-features">
+          <ul className={`ub-features ub-look-${b.look ?? "lines"} ub-cols-${b.cols ?? "auto"} ub-head-${b.head ?? "side"}`}>
             {items.map((it, i) => (
               <li key={i} data-pos-lock="">
                 <div className="ub-card-head">
@@ -812,8 +863,13 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
                     }}
                   />
                 )}
-                {(editing || Boolean(it.text)) && <span className="ub-card-text">{item(b, i, "text", `Destaque ${i + 1} — texto`, "Descreva.")}</span>}
-                <ContactLinks links={it.links ?? []} max={6} onChange={(links, label) => setItem(i, { links }, label)} />
+                {(editing || Boolean(it.text)) && (
+                  <span className={"ub-card-text" + (b.pin === "on" ? " has-pin" : "")}>
+                    {b.pin === "on" && <Icon name="local" className="ico ub-pin" />}
+                    {item(b, i, "text", `Destaque ${i + 1} — texto`, "Descreva.")}
+                  </span>
+                )}
+                <ContactLinks links={it.links ?? []} mode={(b.contactLook as "icons" | "buttons" | "list") ?? "icons"} max={6} onChange={(links, label) => setItem(i, { links }, label)} />
                 {editing && (
                   <div className="ub-card-tools">
                     <LogoTools logo={it.logo} onChange={(logo, label) => setItem(i, { logo, ...(logo ? {} : { logoSize: undefined }) }, label)} />
@@ -875,7 +931,7 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
         return (
           <ContactLinks
             links={b.links ?? []}
-            list={b.style !== "icons"}
+            mode={b.style === "icons" ? "icons" : "list"}
             max={8}
             onChange={(links, label) => (links.length ? patch(b.id, { links }, label) : removeBlock(b)())}
           />
@@ -999,6 +1055,11 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
                     </button>
                   </>
                 )}
+                {b.kind === "features" && (
+                  <button type="button" aria-expanded={lookFor === b.id} className={lookFor === b.id ? "on" : ""} onClick={() => setLookFor(lookFor === b.id ? null : b.id)}>
+                    Aparência
+                  </button>
+                )}
                 {b.kind === "contacts" && (
                   <button type="button" onClick={() => patch(b.id, { style: b.style === "icons" ? "list" : "icons" }, "Estilo dos contatos")}>
                     {b.style === "icons" ? "Com texto" : "Só ícones"}
@@ -1014,6 +1075,12 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
                   ×
                 </button>
               </div>
+            )}
+            {editing && lookFor === b.id && b.kind === "features" && (
+              <LookPanel
+                block={b}
+                onSet={(p, label) => set((l) => l.map((x) => (x.id === b.id ? (Object.fromEntries(Object.entries({ ...x, ...p }).filter(([, v]) => v !== undefined)) as UBlock) : x)), label)}
+              />
             )}
             {render(b)}
             {inserter(i + 1)}
