@@ -81,6 +81,23 @@ export const CopyContext = createContext<CopyCtx>({
   activate: () => {},
 });
 
+/** Custom width and x/y position are laid out for wide screens. On phones and tablets the page
+    stacks into one column, so a text placed against the desktop layout would land behind photos,
+    off screen or squeezed into a narrow column: there it simply follows the page (colour, size and
+    alignment still apply). */
+export const WIDE_LAYOUT = "(min-width: 1024px)";
+export function useWideLayout() {
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia(WIDE_LAYOUT);
+    const on = () => setWide(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return wide;
+}
+
 /** Containers whose texts keep their place in the layout (no free x/y position). */
 export const POS_LOCK = "[data-pos-lock]";
 
@@ -158,6 +175,7 @@ export function Editable({
   const [hud, setHud] = useState("");
   const [dragging, setDragging] = useState(false);
   const [handles, setHandles] = useState<{ resize: boolean; move: boolean }>({ resize: false, move: false });
+  const wide = useWideLayout();
 
   const savedStyle = styleKey ? styles[styleKey] : undefined;
   const eff = live ?? savedStyle;
@@ -177,8 +195,9 @@ export function Editable({
     const el = boxRef.current;
     const inChrome = Boolean(el.closest("foreignObject, .block-bar, .site-header, .wa-float"));
     const inInteractive = Boolean(el.parentElement?.closest("a, button"));
-    setHandles({ resize: !inChrome, move: !inChrome && !inInteractive && !el.closest(POS_LOCK) });
-  }, [editing, styleKey]);
+    // Stretching and moving are desktop tools: on a narrow screen they would set positions for the big one.
+    setHandles({ resize: !inChrome && wide, move: !inChrome && !inInteractive && !el.closest(POS_LOCK) && wide });
+  }, [editing, styleKey, wide]);
 
   // Responsively compute width and anchor-ratio (x, y) translation on every resolution/resize.
   useLayoutEffect(() => {
@@ -199,17 +218,19 @@ export function Editable({
     // Inside a card (features, numbers…) a text follows its card: a position saved against the
     // whole section would drift whenever the cards reflow (edit chrome, screen width, more cards).
     const locked = Boolean(box.closest(POS_LOCK));
-    const ex = locked ? undefined : eff.x;
-    const ey = locked ? undefined : eff.y;
     const sync = () => {
+      const roomy = window.matchMedia(WIDE_LAYOUT).matches;
+      const ex = locked || !roomy ? undefined : eff.x;
+      const ey = locked || !roomy ? undefined : eff.y;
+      const width = roomy ? eff.width : undefined;
       const sw = host.clientWidth;
       const sh = host.clientHeight;
       if (!sw) return;
       const pad = sw < 600 ? 8 : 10;
 
-      if (eff.width !== undefined) {
+      if (width !== undefined) {
         const maxW = Math.max(80, sw - pad * 2);
-        const pxW = Math.min(maxW, Math.round((sw * eff.width) / 100));
+        const pxW = Math.min(maxW, Math.round((sw * width) / 100));
         box.style.width = `${pxW}px`;
         box.style.maxWidth = "none";
       } else {
@@ -218,7 +239,7 @@ export function Editable({
       }
       box.style.textAlign = eff.align ?? "";
 
-      if (ex !== undefined || ey !== undefined || eff.width !== undefined) {
+      if (ex !== undefined || ey !== undefined || width !== undefined) {
         const bw = box.offsetWidth;
         const bh = box.offsetHeight;
         const nat = naturalBoxInHost(box, host);
@@ -227,7 +248,7 @@ export function Editable({
         let dx = 0;
         if (ex !== undefined) {
           dx = r1(pad + (ex / 100) * availW - nat.left);
-        } else if (eff.width !== undefined) {
+        } else if (width !== undefined) {
           if (nat.left + bw > sw - pad) dx = r1(sw - pad - (nat.left + bw));
           if (nat.left + dx < pad) dx = r1(pad - nat.left);
         }

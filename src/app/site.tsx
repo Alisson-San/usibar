@@ -679,7 +679,7 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
       <main className="site-loading">
         <span className="eyebrow">USIBAR / COMPONENTES HIDRÁULICOS</span>
         <p>{failed ? "Não foi possível carregar o catálogo." : "Preparando a apresentação."}</p>
-        {failed && <button onClick={() => location.reload()}>Tentar novamente ↗</button>}
+        {failed && <button onClick={() => location.reload()}>Tentar novamente ↗︎</button>}
       </main>
     );
   const { company, products, sectors, process: steps, services, pillars, layout } = content;
@@ -928,7 +928,7 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
                 {part.specs && <span className="product-specs">{part.specs}</span>}
               </div>
               <span className="round-arrow" aria-hidden="true">
-                {editing ? "✎" : "↗"}
+                {editing ? "✎" : "↗︎"}
               </span>
             </div>
           </button>
