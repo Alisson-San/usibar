@@ -218,7 +218,8 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
       if (!avail || !links.length) return;
       const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
       const widths = links.map((a) => a.offsetWidth);
-      const moreW = more?.offsetWidth ?? 0;
+      // The "+N" is not rendered while everything fits: assume its usual width.
+      const moreW = more?.offsetWidth || 44;
       let fit = 0;
       for (let k = links.length; k >= 0; k--) {
         const used = widths.slice(0, k).reduce((a, w) => a + w, 0) + gap * Math.max(0, k - 1) + (k < links.length ? (k ? gap : 0) + moreW : 0);
@@ -604,7 +605,9 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
           ),
         );
         dock
-          .to(".site-header .header-cta-slot, .site-header .header-contact, .site-header .menu-toggle, .site-header .nav-more", { autoAlpha: 0, duration: 0.25 }, 0)
+          .to(".site-header .header-cta-slot, .site-header .header-contact, .site-header .menu-toggle", { autoAlpha: 0, duration: 0.25 }, 0)
+          // Opacity only: autoAlpha writes an inline visibility that would bring back a hidden "+N" on the way up.
+          .to(".site-header .nav-more", { opacity: 0, pointerEvents: "none", duration: 0.25 }, 0)
           .to(".site-header .header-bg", { opacity: 0, duration: 0.4 }, 0.1)
           .to(".site-header .brand", { scale: 0.82, transformOrigin: "0% 50%", duration: 0.6, ease: "power2.inOut" }, 0.2)
           .to(".site-header .brand-plate", { opacity: 1, duration: 0.3 }, 0.1)

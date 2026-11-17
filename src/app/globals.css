@@ -2416,6 +2416,10 @@ body {
   font: 11px var(--font-mono), monospace;
   cursor: pointer;
 }
+/* Nothing waiting behind "+N": the button is gone (no inline style can bring it back). */
+.main-nav .nav-more.nav-over {
+  display: none;
+}
 .nav-more:hover {
   border-color: var(--orange);
   color: var(--orange);
