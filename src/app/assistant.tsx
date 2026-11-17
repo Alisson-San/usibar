@@ -2,7 +2,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { authFetch } from "@/lib/browser-auth";
-import { cleanTextStyle, CopyContext, POS_LOCK, type TextAlign, type TextStyle } from "./copy";
+import { cleanTextStyle, CopyContext, POS_LOCK, useWideLayout, type TextAlign, type TextStyle } from "./copy";
 
 // Brand colours first; the picker covers anything else.
 const SWATCHES: [string, string][] = [
@@ -91,6 +91,7 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
   const hasBox = Boolean(style.width !== undefined || style.align || style.x !== undefined || style.y !== undefined);
   const inInteractive = Boolean(active.el.parentElement?.closest("a, button"));
   const posLocked = Boolean(active.el.closest(POS_LOCK));
+  const wide = useWideLayout();
   const apply = (next: TextStyle) => {
     const cleaned = cleanTextStyle({ ...next, size: next.size ? round(next.size) : undefined });
     setStyle(active.key, cleaned, active.label);
@@ -186,6 +187,7 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
       </div>
       {panel === "layout" && (
         <div className="tt-panel tt-layout-panel">
+          {wide && (
           <div className="tt-layout-row">
             <span className="tiny-mono">Largura na seção</span>
             <input
@@ -204,6 +206,7 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
               </button>
             )}
           </div>
+          )}
           <div className="tt-layout-row">
             <span className="tiny-mono">Alinhamento</span>
             <div className="tt-actions">
@@ -218,10 +221,13 @@ export function TextToolbar({ ai }: { ai: AiStatus }) {
               ))}
             </div>
           </div>
-          {posLocked && (
+          {!wide && (
+            <p className="tiny-mono tt-note">Largura e posição valem para telas grandes (computador). No celular e no tablet o texto acompanha a página.</p>
+          )}
+          {wide && posLocked && (
             <p className="tiny-mono tt-note">Dentro de um cartão o texto acompanha o cartão; use a largura e o alinhamento.</p>
           )}
-          {!inInteractive && !posLocked && (
+          {wide && !inInteractive && !posLocked && (
             <div className="tt-layout-row">
               <span className="tiny-mono">Posição responsiva</span>
               <div className="tt-actions">

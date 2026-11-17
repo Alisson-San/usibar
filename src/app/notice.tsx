@@ -68,7 +68,7 @@ export function NoticeStrip({ notice, onOpen }: { notice: Notice; onOpen: () => 
         {notice.end !== notice.start && ` – ${br(notice.end)}`}
       </span>
       <button type="button" onClick={onOpen}>
-        Ler aviso ↗
+        Ler aviso ↗︎
       </button>
     </aside>
   );
@@ -177,7 +177,7 @@ export function NoticePanel({ notice, whatsapp, lenis, onSave, onClose }: { noti
             Pré-visualizar
           </button>
           <button className="solid-link" disabled={busy}>
-            Salvar aviso ↗
+            Salvar aviso ↗︎
           </button>
         </div>
       </form>

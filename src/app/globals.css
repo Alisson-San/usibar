@@ -6655,3 +6655,44 @@ div.removed-slot {
     gap: 6px;
   }
 }
+
+/* ======================================================================
+   Phones: header button on one line, footer credit inside the screen
+   ====================================================================== */
+@media (max-width: 700px) {
+  .site-header {
+    gap: 12px;
+  }
+  .site-header .brand {
+    width: 112px;
+  }
+  .site-header .header-contact {
+    white-space: nowrap;
+    padding: 10px 14px;
+    gap: 8px;
+    font-size: 11.5px;
+  }
+  /* On a phone the arrow costs the room the menu button needs. */
+  .site-header .header-contact > span[aria-hidden] {
+    display: none;
+  }
+  .site-header .menu-toggle {
+    flex: none;
+  }
+  /* In a column, a 100% flex-basis is a height: the credit wrapped into a second, off-screen column. */
+  .footer-bottom {
+    flex-wrap: nowrap;
+  }
+  .footer-bottom .footer-credit {
+    flex-basis: auto;
+  }
+}
+@media (max-width: 370px) {
+  .site-header .header-contact {
+    padding: 9px 11px;
+    font-size: 10.5px;
+  }
+  .site-header .brand {
+    width: 96px;
+  }
+}

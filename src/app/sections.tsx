@@ -58,7 +58,7 @@ export const socialsOf = (c: Company): Social[] =>
       : [];
 
 export function Arrow({ down = false }: { down?: boolean }) {
-  return <span aria-hidden="true">{down ? "↓" : "↗"}</span>;
+  return <span aria-hidden="true">{down ? "↓" : "↗︎"}</span>;
 }
 
 /* Brand and contact glyphs, drawn on a 24-unit grid in the site's line style. */
@@ -1072,7 +1072,7 @@ export function SiteFooter({ company, logged, onEdit, nav }: { company: Company;
             <T k="footer.tagline" d="CILINDROS · BLOCOS HIDRÁULICOS · USINAGEM CNC" label="Rodapé — linha" />
           </span>
         </Removable>
-        {logged ? <button onClick={onEdit}>Editar site ↗</button> : <a href="/admin">Área administrativa ↗</a>}
+        {logged ? <button onClick={onEdit}>Editar site ↗︎</button> : <a href="/admin">Área administrativa ↗︎</a>}
         <a className="footer-credit" href="https://nodenhub.com.br" target="_blank" rel="noopener">
           Desenvolvido por Noden
         </a>

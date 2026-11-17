@@ -219,7 +219,7 @@ export function ProductEditor({
               {busy && msg.startsWith("Preparando")
                 ? "ENVIANDO…"
                 : item.imageUrl
-                  ? "CARREGAR OUTRA FOTO ↗"
+                  ? "CARREGAR OUTRA FOTO ↗︎"
                   : "JPG, PNG OU WEBP · ABRE NO EDITOR"}
             </span>
             <input
@@ -324,7 +324,7 @@ export function ProductEditor({
           </p>
           <div className="editor-actions">
             <button className="solid-link" disabled={busy}>
-              {part.id ? "Salvar alterações" : "Cadastrar peça"} ↗
+              {part.id ? "Salvar alterações" : "Cadastrar peça"} ↗︎
             </button>
             {part.id && (
               <button
@@ -511,7 +511,7 @@ export function CompanyPanel({
         </p>
         <div className="editor-actions">
           <button className="solid-link" disabled={busy}>
-            Salvar dados ↗
+            Salvar dados ↗︎
           </button>
         </div>
       </form>
@@ -597,7 +597,7 @@ export function EditBar({
       </button>
       <span className={"edit-status " + state.kind} role="status" aria-live="polite">
         {status}
-        {state.kind === "error" && state.expired && <a href="/admin">Entrar novamente ↗</a>}
+        {state.kind === "error" && state.expired && <a href="/admin">Entrar novamente ↗︎</a>}
       </span>
       {editing && (
         <>
@@ -752,7 +752,7 @@ export function AdminsPanel({
           </label>
           <div className="editor-actions wide">
             <button className="solid-link" disabled={busy}>
-              Adicionar administrador ↗
+              Adicionar administrador ↗︎
             </button>
           </div>
         </form>
@@ -780,7 +780,7 @@ export function AdminsPanel({
           </label>
           <div className="editor-actions wide">
             <button className="solid-link" disabled={busy}>
-              Alterar minha senha ↗
+              Alterar minha senha ↗︎
             </button>
           </div>
         </form>
