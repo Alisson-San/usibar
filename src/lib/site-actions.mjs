@@ -16,7 +16,9 @@ export const BLOCK_SPEC = {
   text: { text: 2000 },
   button: { text: 60, link: "link", style: ["solid", "ghost"] },
   image: { url: "image", caption: 200 },
-  features: { items: "features" },
+  // look: lines | cards | dark; cols: columns; head: logo/icon beside or above the name;
+  // contactLook: icons | buttons (icon + name) | list (icon + number/e-mail); pin: map pin before the text.
+  features: { items: "features", look: ["lines", "cards", "dark"], cols: ["auto", "2", "3", "4"], head: ["side", "top"], contactLook: ["icons", "buttons", "list"], pin: ["on"] },
   callout: { icon: "icon", title: 120, text: 600 },
   quote: { text: 1200, author: 120 },
   stats: { items: "stats" },
@@ -223,6 +225,11 @@ const BLOCK_PROPS = {
     items: obj({ icon: s("Ícone.", { enum: ICON_NAMES }), title: s("Título"), text: s("Texto"), value: s("Número"), label: s("Legenda"), links: CONTACT_LIST }),
   },
   links: CONTACT_LIST,
+  look: s("Destaques: aparência dos cartões (lines: colunas com linhas; cards: cartões claros; dark: cartões escuros).", { enum: ["lines", "cards", "dark"] }),
+  cols: s("Destaques: número de colunas.", { enum: ["auto", "2", "3", "4"] }),
+  head: s("Destaques: logo ou ícone ao lado do nome (side) ou acima (top).", { enum: ["side", "top"] }),
+  contactLook: s("Destaques: contatos só com ícones, como botões com o nome (buttons) ou com os dados (list).", { enum: ["icons", "buttons", "list"] }),
+  pin: s("Destaques: ícone de local antes do texto de cada cartão (on).", { enum: ["on"] }),
 };
 const TEMPLATE_PROPS = {
   nav: s("Nome curto da seção no menu (até 40 caracteres)."),
