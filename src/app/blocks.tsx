@@ -261,7 +261,7 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
                   styleKey={`block.${block.id}.cta`}
                   onCommit={(v) => update(block.id, (x) => ({ ...x, cta: v }), "Botão")}
                 />{" "}
-                <span aria-hidden="true">↗</span>
+                <span aria-hidden="true">↗︎</span>
               </a>
             </OptionalSlot>
           </div>
@@ -415,7 +415,7 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
                 styleKey={`block.${block.id}.button`}
                 onCommit={(v) => update(block.id, (x) => ({ ...x, button: v }), "Botão")}
               />{" "}
-              <span aria-hidden="true">↗</span>
+              <span aria-hidden="true">↗︎</span>
             </a>
           </OptionalSlot>
         </section>
@@ -816,7 +816,7 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
       case "button":
         return (
           <a className={b.style === "ghost" ? "btn-ghost" : "btn-solid"} href={href(b.link)} {...(b.link?.startsWith("http") || b.link === "whatsapp" ? { target: "_blank", rel: "noreferrer" } : {})} onClick={(e) => editing && e.preventDefault()}>
-            {field(b, "text", "Botão", { removeWholeBlock: true })} <span aria-hidden="true">↗</span>
+            {field(b, "text", "Botão", { removeWholeBlock: true })} <span aria-hidden="true">↗︎</span>
           </a>
         );
       case "image":

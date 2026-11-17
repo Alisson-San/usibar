@@ -732,7 +732,7 @@ export function PhotoEditorModal({
                 className="solid-link"
                 onClick={() => filePickerRef.current?.click()}
               >
-                Escolher arquivo do computador ↗
+                Escolher arquivo do computador ↗︎
               </button>
               <button type="button" className="danger-link" onClick={onClose}>
                 Cancelar
@@ -1122,7 +1122,7 @@ export function PhotoEditorModal({
                     disabled={saving}
                     onClick={() => void applyAndSave()}
                   >
-                    {saving ? "Aplicando…" : "Aplicar foto"} ↗
+                    {saving ? "Aplicando…" : "Aplicar foto"} ↗︎
                   </button>
                   <button
                     type="button"

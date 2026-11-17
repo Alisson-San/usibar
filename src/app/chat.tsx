@@ -555,7 +555,7 @@ export function ChatPanel({
                 ✦ Ideias
               </button>
               <button className="primary" disabled={!!busy || (!input.trim() && !pending.length)}>
-                Enviar ↗
+                Enviar ↗︎
               </button>
             </span>
             <input
