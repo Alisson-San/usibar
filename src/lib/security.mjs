@@ -218,6 +218,8 @@ function validLayout(layout, image) {
     if (!b || typeof b.id !== "string" || !/^[a-z0-9-]{1,40}$/i.test(b.id) || ids.has(b.id)) return false;
     ids.add(b.id);
     if ("hidden" in b && typeof b.hidden !== "boolean") return false;
+    // inNav: false keeps a published section out of the page index (menu, cylinder, index sheet).
+    if ("inNav" in b && typeof b.inNav !== "boolean") return false;
     if (BUILTIN_SECTIONS.includes(b.type)) {
       if (b.id !== b.type || "data" in b) return false;
       continue;

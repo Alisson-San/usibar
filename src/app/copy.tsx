@@ -681,14 +681,17 @@ export function SectionEyebrow({
   className?: string;
 }) {
   const { editing, hidden } = useContext(CopyContext);
-  const numOff = hidden.includes(numKey);
+  // An empty num means the numbering is switched off in the index panel: no number, even while editing.
+  const numOff = !num || hidden.includes(numKey);
   const labelOff = hidden.includes(eyebrowKey);
   if (!editing && numOff && labelOff) return null;
   return (
     <span className={className} id={id}>
-      <Removable k={numKey} label={`${sectionLabel} — numeração`}>
-        <T k={numKey} d={num} label={`${sectionLabel} — numeração`} />
-      </Removable>
+      {num && (
+        <Removable k={numKey} label={`${sectionLabel} — numeração`}>
+          <T k={numKey} d={num} label={`${sectionLabel} — numeração`} />
+        </Removable>
+      )}
       {!numOff && !labelOff && " — "}
       <Removable k={eyebrowKey} label={`${sectionLabel} — rótulo`}>
         <T k={eyebrowKey} d={defaultLabel} label={`${sectionLabel} — rótulo`} />

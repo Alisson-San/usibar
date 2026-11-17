@@ -2609,6 +2609,9 @@ body {
 .index-list a[aria-current]::after {
   transform: scaleX(1);
 }
+.index-list a:not(:has(> b)) {
+  grid-template-columns: 1fr auto;
+}
 .index-list b {
   font: 12px var(--font-mono), monospace;
   color: var(--orange-2);
@@ -4871,8 +4874,11 @@ div.removed-slot {
 .is-editing .ub-card-head {
   padding-right: 34px;
 }
+.ub-card-head {
+  flex-wrap: wrap;
+}
 .ub-card-head strong {
-  flex: 1;
+  flex: 1 1 12ch;
   min-width: 0;
 }
 .ub-card-head .ub-icon {
@@ -4881,7 +4887,7 @@ div.removed-slot {
 .ub-logo {
   flex: none;
   width: auto;
-  height: 28px;
+  height: var(--logo-h, 28px);
   max-width: 64px;
   object-fit: contain;
   object-position: left center;
@@ -6283,4 +6289,112 @@ div.removed-slot {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* ======================================================================
+   Index panel (edit bar → Índice)
+   ====================================================================== */
+.nav-panel {
+  max-width: 640px;
+}
+.nav-panel .nav-numbers {
+  margin: 14px 0 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  align-items: flex-start !important;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.nav-rows {
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.nav-rows li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.nav-rows li.is-out .nav-name {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: #68686080;
+}
+.nav-num {
+  color: var(--orange);
+  text-align: center;
+}
+.nav-name {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ink);
+  font-size: 15px;
+}
+.nav-name:hover,
+.nav-name:focus {
+  border-color: var(--line);
+  background: #fff;
+  outline: none;
+}
+.nav-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.nav-in input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--orange);
+}
+.nav-rows em {
+  color: var(--muted);
+  font-style: normal;
+  white-space: nowrap;
+}
+.nav-move {
+  display: inline-flex;
+  gap: 4px;
+}
+.nav-move button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+}
+.nav-move button:disabled {
+  opacity: 0.35;
+}
+@media (max-width: 520px) {
+  .nav-rows li {
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+  }
+  .nav-rows .nav-in,
+  .nav-rows em {
+    grid-column: 2;
+  }
+  .nav-move {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+/* A size chosen with "Logo − / +": wide logos may grow sideways too, up to most of the card. */
+.ub-logo[style*="--logo-h"] {
+  max-width: min(calc(var(--logo-h) * 4), 70%);
+}
+.ub-logo-size {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
