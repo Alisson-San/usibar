@@ -3,7 +3,7 @@ import { useContext, useRef, useState } from "react";
 import { Icon, IconPicker } from "./icons";
 import { CopyContext, Editable, ImageSwap, Removable, RemovableContext, T } from "./copy";
 import { useModal } from "./editing";
-import { CONTACT_HINTS, CONTACT_NAMES, CONTACT_TYPES, MAX_FEATURES, contactHref, contactText, normalizeContact } from "@/lib/site-actions.mjs";
+import { CONTACT_HINTS, CONTACT_NAMES, CONTACT_TYPES, LOGO_SIZE, MAX_FEATURES, contactHref, contactText, normalizeContact } from "@/lib/site-actions.mjs";
 
 // The page between the hero and the footer is an ordered list of sections. Built-in sections
 // keep their own content (catalog, process…); new sections come from templates and carry
@@ -12,7 +12,7 @@ export const BUILTINS = ["solutions", "process", "catalog", "origin", "sectors",
 export type BuiltinType = (typeof BUILTINS)[number];
 export const TEMPLATES = ["blocks", "text-image", "stats", "gallery", "cta", "testimonial"] as const;
 export type TemplateType = (typeof TEMPLATES)[number];
-export type Block = { id: string; type: BuiltinType | TemplateType; hidden?: boolean; data?: Record<string, unknown> };
+export type Block = { id: string; type: BuiltinType | TemplateType; hidden?: boolean; inNav?: boolean; data?: Record<string, unknown> };
 
 export const defaultLayout = (): Block[] => BUILTINS.map((type) => ({ id: type, type }));
 export const isBuiltin = (t: string): t is BuiltinType => (BUILTINS as readonly string[]).includes(t);
@@ -206,14 +206,16 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
   const d = block.data ?? {};
   const p = { block, update };
   const numKey = `block.${block.id.toLowerCase()}.num`;
-  const numOff = hidden.includes(numKey);
+  const numOff = !num || hidden.includes(numKey);
   const hasEyebrow = Boolean(d.eyebrow);
   const eyebrow =
-    editing || !numOff || hasEyebrow ? (
+    (editing && num) || !numOff || hasEyebrow ? (
       <span className="eyebrow">
-        <Removable k={numKey} label="Numeração da seção">
-          <T k={numKey} d={num} label="Numeração da seção" />
-        </Removable>
+        {num && (
+          <Removable k={numKey} label="Numeração da seção">
+            <T k={numKey} d={num} label="Numeração da seção" />
+          </Removable>
+        )}
         {!numOff && hasEyebrow && " — "}
         <BText {...p} field="eyebrow" label="Rótulo da seção" restore="DESTAQUE" />
       </span>
@@ -456,7 +458,7 @@ export function TemplateSection({ block, num, update, whatsapp }: { block: Block
 
 // ---- Free section: a column of blocks, WordPress style ------------------------------------------
 type Contact = { type: string; value: string };
-type UItem = { icon?: string; title?: string; text?: string; value?: string; label?: string; logo?: string; links?: Contact[] };
+type UItem = { icon?: string; title?: string; text?: string; value?: string; label?: string; logo?: string; logoSize?: number; links?: Contact[] };
 type UBlock = { id: string; kind: string; text?: string; title?: string; author?: string; size?: string; link?: string; style?: string; icon?: string; url?: string; caption?: string; items?: UItem[]; links?: Contact[] };
 const KIND_INFO: Record<string, [string, string]> = {
   label: ["Rótulo", "documento"],
@@ -787,7 +789,13 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
               <li key={i} data-pos-lock="">
                 <div className="ub-card-head">
                   {it.logo ? (
-                    <img className="ub-logo" src={it.logo} alt={`Logo ${it.title ?? ""}`.trim()} loading="lazy" />
+                    <img
+                      className="ub-logo"
+                      src={it.logo}
+                      alt={`Logo ${it.title ?? ""}`.trim()}
+                      loading="lazy"
+                      style={it.logoSize ? ({ "--logo-h": `${it.logoSize}px` } as React.CSSProperties) : undefined}
+                    />
                   ) : (
                     <button type="button" className="ub-icon" disabled={!editing} onClick={() => setIconFor(iconFor === `${b.id}:${i}` ? null : `${b.id}:${i}`)} aria-label="Trocar ícone">
                       <Icon name={it.icon ?? "info"} />
@@ -808,7 +816,27 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
                 <ContactLinks links={it.links ?? []} max={6} onChange={(links, label) => setItem(i, { links }, label)} />
                 {editing && (
                   <div className="ub-card-tools">
-                    <LogoTools logo={it.logo} onChange={(logo, label) => setItem(i, { logo }, label)} />
+                    <LogoTools logo={it.logo} onChange={(logo, label) => setItem(i, { logo, ...(logo ? {} : { logoSize: undefined }) }, label)} />
+                    {it.logo && (
+                      <span className="ub-logo-size" role="group" aria-label="Tamanho da logo">
+                        <button type="button" className="ub-tool" disabled={(it.logoSize ?? LOGO_SIZE.base) <= LOGO_SIZE.min} aria-label="Diminuir a logo" onClick={() => setItem(i, { logoSize: Math.max(LOGO_SIZE.min, (it.logoSize ?? LOGO_SIZE.base) - LOGO_SIZE.step) }, "Tamanho da logo")}>
+                          Logo −
+                        </button>
+                        <button type="button" className="ub-tool" disabled={(it.logoSize ?? LOGO_SIZE.base) >= LOGO_SIZE.max} aria-label="Aumentar a logo" onClick={() => setItem(i, { logoSize: Math.min(LOGO_SIZE.max, (it.logoSize ?? LOGO_SIZE.base) + LOGO_SIZE.step) }, "Tamanho da logo")}>
+                          Logo +
+                        </button>
+                        {items.filter((x) => x.logo).length > 1 && items.some((x) => x.logo && (x.logoSize ?? LOGO_SIZE.base) !== (it.logoSize ?? LOGO_SIZE.base)) && (
+                          <button
+                            type="button"
+                            className="ub-tool"
+                            title="Deixar as logos de todos os cartões com este tamanho"
+                            onClick={() => patch(b.id, { items: items.map((x) => (x.logo ? { ...x, logoSize: it.logoSize ?? LOGO_SIZE.base } : x)) }, "Tamanho das logos igualado")}
+                          >
+                            Igualar todas
+                          </button>
+                        )}
+                      </span>
+                    )}
                     {i > 0 && (
                       <button type="button" className="ub-tool" aria-label={`Mover destaque ${i + 1} para a esquerda`} onClick={() => patch(b.id, { items: items.map((x, j) => (j === i - 1 ? items[i] : j === i ? items[i - 1] : x)) }, "Destaque movido")}>
                         ←
@@ -941,7 +969,7 @@ function FreeSection({ block, num, update, whatsapp }: { block: Block; num: stri
   return (
     <section id={blockDom(block)} className="tpl tpl-blocks">
       <div className="ub-flow">
-        {editing && <span className="eyebrow ub-num">{num} — seção livre</span>}
+        {editing && <span className="eyebrow ub-num">{num ? `${num} — seção livre` : "Seção livre"}</span>}
         {inserter(0)}
         {blocks.map((b, i) => (
           <div key={b.id} className={`ub ub-k-${b.kind}`}>
@@ -1039,8 +1067,9 @@ export function BlockBar({
   onRename?: (v: string) => void;
 }) {
   return (
-    <div className="block-bar" role="group" aria-label={`Seção ${num}: ${name}`}>
-      <b>{num}</b>
+    <div className="block-bar" role="group" aria-label={`Seção ${num ? num + ": " : ""}${name}`}>
+      {num && <b>{num}</b>}
+      {block.inNav === false && !block.hidden && <em>Fora do índice</em>}
       {onRename ? <Editable value={name} editing label="Nome da seção no menu" onCommit={onRename} /> : <span>{name}</span>}
       {block.hidden && <em>Oculta para visitantes</em>}
       <button onClick={() => onMove(-1)} disabled={first} aria-label="Subir seção">

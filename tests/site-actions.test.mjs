@@ -180,8 +180,18 @@ test("cards with logo and contacts; standalone contacts block", async () => {
     assert.equal(validBlocks([bad], img), false, JSON.stringify(bad));
 });
 
+test("cards: logo size within limits; sections may stay out of the index", () => {
+  const card = { icon: "pessoas", title: "Fluid", logo: "/assets/logo.webp" };
+  assert.equal(validBlocks([{ id: "a", kind: "features", items: [{ ...card, logoSize: 48 }] }], img), true);
+  for (const logoSize of [8, 200, 30.5, "48"]) assert.equal(validBlocks([{ id: "a", kind: "features", items: [{ ...card, logoSize }] }], img), false, String(logoSize));
+  const layout = content.layout.map((b) => (b.id === "process" ? { ...b, inNav: false } : b));
+  assert.equal(validData({ ...content, layout }), true);
+  assert.equal(validData({ ...content, layout: content.layout.map((b) => (b.id === "process" ? { ...b, inNav: "não" } : b)) }), false);
+  assert.equal(validData({ ...content, copy: { "index.numbers": "on" } }), true);
+});
+
 test("assistant: contacts on cards are normalized and logos survive a card update", () => {
-  const blocks = [{ id: "f1", kind: "features", items: [{ icon: "pessoas", title: "Fluid", logo: "/assets/hero-bench.webp" }, { icon: "pessoas", title: "RV" }] }];
+  const blocks = [{ id: "f1", kind: "features", items: [{ icon: "pessoas", title: "Fluid", logo: "/assets/hero-bench.webp", logoSize: 40 }, { icon: "pessoas", title: "RV" }] }];
   const free = { id: "rep1", type: "blocks", data: { nav: "Representantes", blocks } };
   const c2 = { ...content, layout: [...content.layout, free] };
   const site2 = { ...site, sections: [...site.sections, { id: "rep1", type: "blocks", name: "Representantes", hidden: false, blocks }] };
@@ -196,6 +206,7 @@ test("assistant: contacts on cards are normalized and logos survive a card updat
   const items = r.content.layout.at(-1).data.blocks[0].items;
   assert.deepEqual(items[0].links, [{ type: "whatsapp", value: "5554991234567" }], "bad e-mail dropped, number normalized");
   assert.equal(items[0].logo, "/assets/hero-bench.webp", "logo kept");
+  assert.equal(items[0].logoSize, 40, "logo size kept");
   assert.equal(items[0].icon, "pessoas", "icon kept when the assistant omits it");
   assert.deepEqual(items[1].links, [{ type: "instagram", value: "rv.rep" }]);
   const [add] = acceptActions([{ name: "add_block", args: { section: "rep1", kind: "contacts", style: "list", links: [{ type: "email", value: "vendas@usibar.com.br" }] } }], site2, texts).actions;

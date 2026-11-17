@@ -535,6 +535,7 @@ export function EditBar({
   onHintClose,
   onCompany,
   onNotice,
+  onIndex,
   noticeOn,
   onAdmins,
   onAdd,
@@ -551,6 +552,7 @@ export function EditBar({
   onHintClose: () => void;
   onCompany: () => void;
   onNotice: () => void;
+  onIndex: () => void;
   noticeOn: boolean;
   onAdmins?: () => void;
   onAdd: () => void;
@@ -581,6 +583,7 @@ export function EditBar({
             <li>Textos e botões com “×” podem ser removidos e recolocados depois.</li>
             <li>Cartões de “Destaques” (representantes, equipe…): cada cartão tem “+ Logo” (logo pequena antes do nome), “+ Contato” (WhatsApp, e-mail, telefone, site ou Instagram, mostrados como ícones clicáveis), setas para reordenar e “Duplicar”.</li>
             <li>“Aviso” agenda uma mensagem ao abrir o site, como férias coletivas.</li>
+            <li>“Editar índice”: renomear, reordenar ou tirar seções do índice da página, e ligar ou desligar os números (01, 02…).</li>
             <li>Fotos: ao carregar uma nova imagem ou clicar em “Ajustar”, o editor permite redimensionar, recortar, nivelar o ângulo e remover o fundo branco.</li>
             <li>Peças: clique no cartão para editar; “+ Nova peça” para cadastrar.</li>
             <li>Errou? Use “Desfazer” ou Ctrl+Z — vale também para exclusões.</li>
@@ -603,6 +606,9 @@ export function EditBar({
           </button>
           <button onClick={onAdd}>+ Nova peça</button>
           <button onClick={onCompany}>Empresa e contatos</button>
+          <button onClick={onIndex} title="Nomes, ordem e números do índice da página">
+            Editar índice
+          </button>
           <button onClick={onNotice} title="Aviso que aparece ao abrir o site (férias, feriados…)">
             Aviso{noticeOn ? " •" : ""}
           </button>
