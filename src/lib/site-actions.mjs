@@ -76,7 +76,9 @@ export function contactText({ type, value }) {
   if (type === "site") return value.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, "");
   return value;
 }
-const FEATURE_KEYS = ["icon", "title", "text", "logo", "links"];
+const FEATURE_KEYS = ["icon", "title", "text", "logo", "logoSize", "links"];
+// Height of a card's logo, in pixels (the width follows the logo's own proportions).
+export const LOGO_SIZE = { min: 16, max: 96, step: 4, base: 28 };
 export const MAX_FEATURES = 12;
 const validFeature = (it, image) =>
   !!it &&
@@ -84,6 +86,7 @@ const validFeature = (it, image) =>
   okText(it.title, 80) &&
   okOpt(it.text, 300) &&
   (it.logo === undefined || image(it.logo)) &&
+  (it.logoSize === undefined || (Number.isInteger(it.logoSize) && it.logoSize >= LOGO_SIZE.min && it.logoSize <= LOGO_SIZE.max)) &&
   (it.links === undefined || validContacts(it.links, 6)) &&
   Object.keys(it).every((x) => FEATURE_KEYS.includes(x));
 
@@ -1330,7 +1333,7 @@ export function applyAction(c, { name, args: a }, ctx) {
         if (fields.items && old.kind === "features")
           fields.items = fields.items.map((it, i) => {
             const prev = old.items?.[i];
-            return { ...it, icon: it.icon ?? prev?.icon ?? "check", ...(prev?.logo && !it.logo ? { logo: prev.logo } : {}) };
+            return { ...it, icon: it.icon ?? prev?.icon ?? "check", ...(prev?.logo && !it.logo ? { logo: prev.logo, ...(prev.logoSize ? { logoSize: prev.logoSize } : {}) } : {}) };
           });
         list[at] = withImage({ ...old, ...fields });
       }

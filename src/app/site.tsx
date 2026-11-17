@@ -19,6 +19,7 @@ import {
 } from "./editing";
 import { CopyContext, ImageSwap, Removable, SectionEyebrow, SectionHeading, T, type Field, type PhotoEditorOpts, type TextStyle } from "./copy";
 import { PhotoEditorModal } from "./photo-editor";
+import { NavPanel } from "./nav-panel";
 import { TextToolbar, type AiStatus } from "./assistant";
 import { ChatPanel, type ChatAction, type ChatSite } from "./chat";
 import { NoticeModal, NoticePanel, NoticeStrip, noticeDue } from "./notice";
@@ -78,11 +79,16 @@ const defaultProcess: Step[] = [
 // Sections as numbered sheets: header, cylinder navigation, index menu and footer all follow
 // the visible sections in the order the admin chose.
 type NavItem = { id: string; n: string; label: string; hint: string };
+// Numbers in the index are optional (index panel); when on they count only the sections that are
+// in the index, so taking one out never leaves a gap (…05, 07…).
+export const showNavNumbers = (c: Content) => c.copy["index.numbers"] === "on";
+const inIndex = (b: Block) => !b.hidden && b.inNav !== false;
 function buildNav(c: Content): NavItem[] {
+  const numbered = showNavNumbers(c);
   return c.layout
-    .filter((b) => !b.hidden)
+    .filter(inIndex)
     .map((b, i) => {
-      const n = String(i + 1).padStart(2, "0");
+      const n = numbered ? String(i + 1).padStart(2, "0") : "";
       if (isBuiltin(b.type)) {
         const info = BUILTIN_INFO[b.type];
         return { id: info.dom, n, label: c.copy[`nav.${b.type}`] ?? info.nav, hint: c.copy[`nav.${b.type}.hint`] ?? info.hint };
@@ -173,6 +179,7 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
     [chatOpen, setChatOpen] = useState(false),
     [noticeShown, setNoticeShown] = useState(false),
     [noticeEdit, setNoticeEdit] = useState(false),
+    [navEdit, setNavEdit] = useState(false),
     [pickerAt, setPickerAt] = useState<number | null>(null),
     [photoJob, setPhotoJob] = useState<({ source: File | string } & PhotoEditorOpts) | null>(null),
     [waHello, setWaHello] = useState(false);
@@ -833,8 +840,8 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
     const b = layout.find((x) => x.id === id);
     if (b) goTo(blockDom(b));
   };
-  const numbers = new Map<string, string>();
-  layout.filter((b) => !b.hidden).forEach((b, i) => numbers.set(b.id, String(i + 1).padStart(2, "0")));
+  // Section numbers follow the index: same count, none for sections out of it or when numbering is off.
+  const numbers = new Map<string, string>(nav.map((n) => [layout.find((b) => blockDom(b) === n.id)?.id ?? n.id, n.n]));
 
   const catalog = (num: string) => (
     <section className="product-section" id="pecas">
@@ -1166,7 +1173,7 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
                   tabIndex={over ? -1 : undefined}
                   aria-current={section === n.id ? "location" : undefined}
                 >
-                  <small>{n.n}</small>
+                  {n.n && <small>{n.n}</small>}
                   {n.label}
                 </a>
               );
@@ -1214,7 +1221,7 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
                 onClick={() => goTo(n.id)}
               >
                 <span className="station-label">
-                  <small>{n.n}</small>
+                  {n.n && <small>{n.n}</small>}
                   {n.label}
                 </span>
                 <i className="station-dot rail-fade" aria-hidden="true" />
@@ -1263,7 +1270,7 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
                       setTimeout(() => goTo(n.id), 60);
                     }}
                   >
-                    <b>{n.n}</b>
+                    {n.n && <b>{n.n}</b>}
                     <strong>{n.label}</strong>
                     <span>{n.hint}</span>
                   </a>
@@ -1373,7 +1380,7 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
         )}
         {layout.map((b, i) => {
           if (b.hidden && !editing) return null;
-          const num = numbers.get(b.id) ?? "··";
+          const num = numbers.get(b.id) ?? "";
           return (
             <div key={b.id} className={"block" + (b.hidden ? " is-hidden" : "")} data-block={b.type}>
               {editing && (
@@ -1542,6 +1549,44 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
             }}
           />
         )}
+        {navEdit && editing && (
+          <NavPanel
+            layout={layout}
+            numbers={showNavNumbers(content)}
+            name={blockName}
+            lenis={lenisRef.current}
+            onClose={() => setNavEdit(false)}
+            onNumbers={(on) =>
+              commit(on ? "Números do índice ligados" : "Números do índice desligados", (c) => {
+                const copy = { ...c.copy };
+                if (on) copy["index.numbers"] = "on";
+                else delete copy["index.numbers"];
+                return { ...c, copy };
+              })
+            }
+            onMove={(i, dir) =>
+              setLayout(`Seção “${blockName(layout[i])}” movida`, (l) => {
+                const next = [...l];
+                [next[i], next[i + dir]] = [next[i + dir], next[i]];
+                return next;
+              })
+            }
+            onRename={(b, v) =>
+              isBuiltin(b.type)
+                ? commit("Nome no índice alterado", (c) => ({ ...c, copy: { ...c.copy, [`nav.${b.type}`]: v } }))
+                : updateBlock(b.id, (d) => ({ ...d, nav: v }), "Nome no índice")
+            }
+            onInNav={(b, on) =>
+              setLayout(on ? `“${blockName(b)}” voltou ao índice` : `“${blockName(b)}” saiu do índice`, (l) =>
+                l.map((x) => {
+                  if (x.id !== b.id) return x;
+                  const { inNav: _drop, ...rest } = x;
+                  return on ? rest : { ...rest, inNav: false };
+                }),
+              )
+            }
+          />
+        )}
         {logged && (
           <EditBar
             editing={editing}
@@ -1558,6 +1603,7 @@ export default function UsibarHome({ initial }: { initial?: unknown }) {
             onAdd={() => setEditorPart({ ...blankPart })}
             onCompany={() => setCompanyOpen(true)}
             onNotice={() => setNoticeEdit(true)}
+            onIndex={() => setNavEdit(true)}
             noticeOn={!!content.notice?.enabled}
             onCurate={() => setChatOpen((o) => !o)}
             onAdmins={accounts ? () => setAdminsOpen(true) : undefined}
