@@ -2416,6 +2416,10 @@ body {
   font: 11px var(--font-mono), monospace;
   cursor: pointer;
 }
+/* Nothing waiting behind "+N": the button is gone (no inline style can bring it back). */
+.main-nav .nav-more.nav-over {
+  display: none;
+}
 .nav-more:hover {
   border-color: var(--orange);
   color: var(--orange);
@@ -6397,4 +6401,257 @@ div.removed-slot {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* ======================================================================
+   Cards block ("Destaques"): appearance options — representatives, team…
+   ====================================================================== */
+.ub-features.ub-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ub-features.ub-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ub-features.ub-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1000px) {
+  .ub-features.ub-cols-3,
+  .ub-features.ub-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .ub-features.ub-cols-2,
+  .ub-features.ub-cols-3,
+  .ub-features.ub-cols-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Logo or icon above the name */
+.ub-head-top .ub-card-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+.ub-head-top .ub-card-head strong {
+  flex: none;
+  width: 100%;
+}
+.ub-head-top .ub-logo {
+  height: var(--logo-h, 44px);
+  max-width: min(calc(var(--logo-h, 44px) * 4), 100%);
+}
+.ub-head-top .ub-icon {
+  width: 54px;
+  height: 54px;
+}
+
+/* Map pin before the text (region served) */
+.ub-features .ub-card-text.has-pin {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.ub-pin {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 3px;
+  color: var(--orange);
+}
+
+/* Contacts as buttons with the channel's name */
+.ub-contacts.is-buttons a {
+  gap: 8px;
+  padding: 5px 14px 5px 5px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+.ub-contacts.is-buttons .ub-contact-ico {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: color-mix(in srgb, var(--orange) 12%, transparent);
+}
+.ub-contacts.is-buttons .ub-contact-ico .ico {
+  width: 15px;
+  height: 15px;
+}
+.ub-contacts.is-buttons .ub-contact-text {
+  font-size: 13px;
+  font-weight: 500;
+}
+.ub-contacts.is-buttons a:hover,
+.ub-contacts.is-buttons a:focus-visible {
+  border-color: var(--orange);
+  background: var(--orange);
+  color: var(--paper);
+}
+.ub-contacts.is-buttons a:hover .ub-contact-ico,
+.ub-contacts.is-buttons a:focus-visible .ub-contact-ico {
+  background: #f7f2e933;
+}
+
+/* Light cards */
+.ub-look-cards,
+.ub-look-dark {
+  gap: 20px;
+  border-top: 0;
+}
+.ub-look-cards > li,
+.ub-look-dark > li,
+.ub-look-cards > li + li,
+.ub-look-dark > li + li {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 30px 28px 26px;
+  border: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  transition: transform 0.35s var(--ease-out, ease), box-shadow 0.35s, border-color 0.35s;
+}
+.ub-look-cards > li {
+  background: color-mix(in srgb, #fff 55%, var(--paper));
+}
+.ub-look-cards > li::before,
+.ub-look-dark > li::before {
+  content: "";
+  position: absolute;
+  inset: -1px -1px auto;
+  height: 3px;
+  background: var(--orange);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.45s var(--ease-out, ease);
+}
+.ub-look-cards > li:hover,
+.ub-look-dark > li:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px #292c271f;
+}
+.ub-look-cards > li:hover::before,
+.ub-look-dark > li:hover::before {
+  transform: scaleX(1);
+}
+.is-editing .ub-look-cards > li:hover,
+.is-editing .ub-look-dark > li:hover {
+  transform: none;
+}
+/* Contacts sit at the bottom of every card, under a thin rule, so the cards line up. */
+.ub-look-cards .ub-contacts-wrap,
+.ub-look-dark .ub-contacts-wrap {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.ub-look-cards .ub-card-tools,
+.ub-look-dark .ub-card-tools {
+  margin-top: 4px;
+}
+
+/* Dark cards */
+.ub-look-dark > li {
+  background: var(--ink);
+  border-color: #3b3e38;
+  color: var(--paper);
+}
+.ub-look-dark .ub-card-head strong {
+  color: var(--paper);
+}
+.ub-look-dark .ub-card-text {
+  color: #c9c4b8;
+}
+.ub-look-dark .ub-contacts-wrap {
+  border-top-color: #f7f2e926;
+}
+.ub-look-dark .ub-icon {
+  border-color: #f7f2e93a;
+  color: #efa077;
+}
+.ub-look-dark .ub-pin,
+.ub-look-dark .ub-contact-ico {
+  color: #efa077;
+}
+.ub-features.ub-look-dark .ub-contact-ico {
+  color: #efa077;
+  border-color: #f7f2e93a;
+}
+.ub-look-dark .ub-contacts a {
+  color: var(--paper);
+}
+.ub-look-dark .ub-contacts.is-buttons a {
+  border-color: #f7f2e93a;
+}
+.ub-look-dark .ub-contacts.is-buttons .ub-contact-ico {
+  background: #f7f2e914;
+}
+/* Logos keep their own colours on a light plate. */
+.ub-look-dark .ub-logo {
+  box-sizing: content-box;
+  padding: 8px 10px;
+  border-radius: 3px;
+  background: var(--paper);
+}
+.ub-look-dark .ub-tool,
+.ub-look-dark .ub-contact-add {
+  border-color: #f7f2e94d;
+  color: #e6e0d4;
+}
+
+/* "Aparência" panel under the block bar */
+.ub-bar button.on {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+.ub-look {
+  display: grid;
+  gap: 10px;
+  max-width: 980px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px dashed var(--line);
+  background: color-mix(in srgb, #fff 45%, var(--paper));
+}
+.ub-look-row {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.ub-look-row > .tiny-mono {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.ub-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ub-seg button {
+  min-height: 30px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+}
+.ub-seg button:hover {
+  border-color: var(--orange);
+}
+.ub-seg button.on {
+  border-color: var(--orange);
+  background: var(--orange);
+  color: var(--paper);
+}
+@media (max-width: 640px) {
+  .ub-look-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
 }
